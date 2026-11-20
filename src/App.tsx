@@ -2,6 +2,7 @@ import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
 import { RoomExperience } from './components/RoomExperience';
 import { BootScreen } from './components/BootScreen';
 import { DesktopOS } from './components/os/DesktopOS';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 function WorkspaceRouter() {
   const { experienceState } = useWorkspace();
@@ -26,6 +27,7 @@ export default function App() {
   return (
     <WorkspaceProvider>
       <WorkspaceRouter />
+      <SpeedInsights />
     </WorkspaceProvider>
   );
 }
