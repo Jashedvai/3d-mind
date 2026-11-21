@@ -5,8 +5,8 @@ import { soundEngine } from '../../../audio/soundEngine';
 
 const DEFAULT_NOTE = `JashedOS Scratchpad
 ===================
-Welcome to my Digital Workspace.
-Try typing on your physical keyboard or toggle the Virtual Mechanical Keyboard below!
+Digital Workspace Notes
+Use your physical keyboard or toggle the Virtual Mechanical Keyboard below.
 
 Quick Notes:
 - Building PanelFlow AI V8 & panelcolour Manga Colorizer

@@ -27,7 +27,7 @@ export function ResumeApp() {
           <p className="text-xs font-mono text-[#9CA3AF] mt-1">
             {PROFILE.location} · {PROFILE.email} · {PROFILE.phone}
           </p>
-          <p className="text-xs font-mono text-[#A78BFA] mt-1">{PROFILE.education}</p>
+          <p className="text-xs font-mono text-[#9CA3AF] mt-1">{PROFILE.education}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

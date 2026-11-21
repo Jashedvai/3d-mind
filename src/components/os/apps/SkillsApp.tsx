@@ -38,7 +38,7 @@ export function SkillsApp() {
                   </div>
                   <div className="h-1.5 w-full rounded-full bg-white/[0.08] overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-[#38BDF8] to-[#818CF8]"
+                      className="h-full rounded-full bg-[#38BDF8]"
                       style={{ width: `${item.ratio}%` }}
                     />
                   </div>

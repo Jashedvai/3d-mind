@@ -36,7 +36,7 @@ export function MusicApp() {
       // Background radial glow
       const glow = ctx.createRadialGradient(cx, cy, 10, cx, cy, w * 0.45);
       glow.addColorStop(0, 'rgba(56, 189, 248, 0.22)');
-      glow.addColorStop(0.5, 'rgba(129, 140, 248, 0.12)');
+      glow.addColorStop(0.5, 'rgba(10, 132, 255, 0.12)');
       glow.addColorStop(1, 'rgba(7, 9, 14, 0)');
       ctx.fillStyle = glow;
       ctx.fillRect(0, 0, w, h);
@@ -59,7 +59,7 @@ export function MusicApp() {
             else ctx.lineTo(x, y);
           }
           ctx.closePath();
-          ctx.strokeStyle = r === 0 ? '#38BDF8' : r === 1 ? '#A855F7' : '#818CF8';
+          ctx.strokeStyle = r === 0 ? '#38BDF8' : r === 1 ? '#0A84FF' : '#7DD3FC';
           ctx.lineWidth = r === 0 ? 2.5 : 1.5;
           ctx.stroke();
         }
@@ -77,7 +77,7 @@ export function MusicApp() {
             if (x === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
           }
-          ctx.strokeStyle = l === 0 ? '#38BDF8' : l === 1 ? '#818CF8' : '#C084FC';
+          ctx.strokeStyle = l === 0 ? '#38BDF8' : l === 1 ? '#0A84FF' : '#7DD3FC';
           ctx.lineWidth = 2.2;
           ctx.stroke();
         }
@@ -149,7 +149,7 @@ export function MusicApp() {
         <button
           type="button"
           onClick={() => soundEngine.toggleMusic()}
-          className="w-14 h-14 rounded-full bg-gradient-to-br from-[#38BDF8] to-[#818CF8] text-[#07080B] inline-flex items-center justify-center hover:opacity-90 transition-opacity"
+          className="w-14 h-14 rounded-full bg-[#38BDF8] text-[#07080B] inline-flex items-center justify-center hover:opacity-90 transition-opacity"
           aria-label={audioState.musicPlaying ? 'Pause music' : 'Play music'}
         >
           {audioState.musicPlaying ? (

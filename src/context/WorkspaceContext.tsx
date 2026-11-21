@@ -9,6 +9,23 @@ export type ExperienceState =
   | 'BOOTING'
   | 'DESKTOP';
 
+export type RoomCameraPose =
+  | 'OVERVIEW'
+  | 'DESK'
+  | 'BED_LYING'
+  | 'PHONE'
+  | 'WALL_SWITCH'
+  | 'GAMING';
+
+export interface RoomDevicesState {
+  ceilingLight: boolean;
+  deskLight: boolean;
+  rgbLight: boolean;
+  bedLight: boolean;
+  fan: boolean;
+  ac: boolean;
+}
+
 export type AppId =
   | 'editorial'
   | 'about'
@@ -27,7 +44,7 @@ export type AppId =
   | `project:${string}`;
 
 export type WallpaperId = 'sonoma' | 'obsidian' | 'setup-dark' | 'setup-neon' | 'room-iso' | 'grid';
-export type AccentId = 'violet' | 'cyan' | 'amber' | 'emerald';
+export type AccentId = 'cyan' | 'blue' | 'emerald' | 'amber';
 export type SnapZone = 'none' | 'left' | 'right' | 'top';
 
 export interface WindowBounds {
@@ -49,15 +66,24 @@ export interface OSWindowState extends WindowBounds {
 }
 
 export const ACCENT_COLORS: Record<AccentId, { hex: string; label: string }> = {
-  violet: { hex: '#8B5CF6', label: 'Electric Violet' },
-  cyan: { hex: '#38BDF8', label: 'Ice Cyan' },
-  amber: { hex: '#F59E0B', label: 'Amber Gold' },
-  emerald: { hex: '#2DD4BF', label: 'Teal Pulse' },
+  cyan: { hex: '#38BDF8', label: 'Ice Sky' },
+  blue: { hex: '#0A84FF', label: 'Apple Cobalt' },
+  emerald: { hex: '#2DD4BF', label: 'Teal' },
+  amber: { hex: '#F59E0B', label: 'Warm Amber' },
+};
+
+const INITIAL_DEVICES: RoomDevicesState = {
+  ceilingLight: true,
+  deskLight: true,
+  rgbLight: true,
+  bedLight: true,
+  fan: true,
+  ac: true,
 };
 
 const APP_TITLES: Record<string, { title: string; w: number; h: number }> = {
   editorial: { title: 'AHJ Studio — Editorial Portfolio', w: 980, h: 620 },
-  about: { title: 'About Me', w: 680, h: 520 },
+  about: { title: 'About Jashed', w: 680, h: 520 },
   projects: { title: 'Projects', w: 820, h: 560 },
   skills: { title: 'Skills', w: 740, h: 520 },
   journey: { title: '3D Journey', w: 860, h: 560 },
@@ -81,6 +107,24 @@ interface WorkspaceContextValue {
   powerOnPC: () => void;
   skipToDesktop: (initialApp?: AppId) => void;
   exitToRoom: () => void;
+  // Centralized 3D Bedroom & Interactive Device State
+  cameraPose: RoomCameraPose;
+  setCameraPose: React.Dispatch<React.SetStateAction<RoomCameraPose>>;
+  roomLightsOn: boolean;
+  setRoomLightsOn: (enabled: boolean) => void;
+  devices: RoomDevicesState;
+  setDevices: React.Dispatch<React.SetStateAction<RoomDevicesState>>;
+  toggleDeviceState: (key: keyof RoomDevicesState) => boolean;
+  phoneCharging: boolean;
+  setPhoneCharging: React.Dispatch<React.SetStateAction<boolean>>;
+  togglePhoneCharging: () => boolean;
+  batteryLevel: number;
+  gamingMode: boolean;
+  setGamingMode: React.Dispatch<React.SetStateAction<boolean>>;
+  toggleGamingMode: () => boolean;
+  steeringAngle: number;
+  setSteeringAngle: React.Dispatch<React.SetStateAction<number>>;
+  // OS Preferences & Windows
   reducedMotion: boolean;
   setReducedMotion: React.Dispatch<React.SetStateAction<boolean>>;
   windows: OSWindowState[];
@@ -113,6 +157,13 @@ const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [experienceState, setExperienceState] = useState<ExperienceState>('ENTRANCE');
+  const [cameraPose, setCameraPose] = useState<RoomCameraPose>('OVERVIEW');
+  const [devices, setDevices] = useState<RoomDevicesState>(INITIAL_DEVICES);
+  const [phoneCharging, setPhoneCharging] = useState<boolean>(false);
+  const [batteryLevel, setBatteryLevel] = useState<number>(64);
+  const [gamingMode, setGamingMode] = useState<boolean>(false);
+  const [steeringAngle, setSteeringAngle] = useState<number>(0);
+
   const [reducedMotion, setReducedMotion] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -124,11 +175,64 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [snapPreview, setSnapPreview] = useState<SnapZone>('none');
 
   const [wallpaper, setWallpaper] = useState<WallpaperId>('sonoma');
-  const [accent, setAccent] = useState<AccentId>('violet');
+  const [accent, setAccent] = useState<AccentId>('cyan');
   const [showVirtualKeyboard, setShowVirtualKeyboard] = useState<boolean>(false);
   const [lastTypedKey, setLastTypedKey] = useState<{ key: string; ts: number } | null>(null);
   const [audioState, setAudioState] = useState(() => soundEngine.getState());
   const [notification, setNotification] = useState<string | null>(null);
+
+  const roomLightsOn =
+    devices.ceilingLight || devices.deskLight || devices.rgbLight || devices.bedLight;
+
+  const setRoomLightsOn = useCallback((enabled: boolean) => {
+    soundEngine.playKeyClick(false);
+    setDevices((prev) => ({
+      ...prev,
+      ceilingLight: enabled,
+      deskLight: enabled,
+      rgbLight: enabled,
+      bedLight: enabled,
+    }));
+  }, []);
+
+  const toggleDeviceState = useCallback((key: keyof RoomDevicesState): boolean => {
+    let nextValue = false;
+    setDevices((prev) => {
+      nextValue = !prev[key];
+      return { ...prev, [key]: nextValue };
+    });
+    soundEngine.playKeyClick(false);
+    return nextValue;
+  }, []);
+
+  const togglePhoneCharging = useCallback((): boolean => {
+    let nextValue = false;
+    setPhoneCharging((prev) => {
+      nextValue = !prev;
+      return nextValue;
+    });
+    soundEngine.playMouseClick();
+    return nextValue;
+  }, []);
+
+  const toggleGamingMode = useCallback((): boolean => {
+    let nextValue = false;
+    setGamingMode((prev) => {
+      nextValue = !prev;
+      return nextValue;
+    });
+    soundEngine.playWindowOpen();
+    return nextValue;
+  }, []);
+
+  // Increment battery gradually while phone is plugged into the virtual wall outlet
+  useEffect(() => {
+    if (!phoneCharging) return;
+    const timer = window.setInterval(() => {
+      setBatteryLevel((curr) => (curr < 100 ? curr + 1 : 100));
+    }, 2400);
+    return () => window.clearInterval(timer);
+  }, [phoneCharging]);
 
   useEffect(() => {
     return soundEngine.subscribe(() => {
@@ -192,11 +296,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const enterRoom = useCallback(() => {
     soundEngine.playTransitionSwoosh();
+    setCameraPose('OVERVIEW');
     setExperienceState('EXPLORING');
   }, []);
 
   const sitAtDesk = useCallback(() => {
     soundEngine.playTransitionSwoosh();
+    setCameraPose('DESK');
     setExperienceState('APPROACHING_DESK');
   }, []);
 
@@ -218,13 +324,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       } else if (typeof window !== 'undefined' && window.innerWidth >= 768) {
         openApp('editorial');
       }
-      notify('Welcome to JashedOS — drag any window titlebar to an edge to snap.');
+      notify('JashedOS ready — drag any window titlebar to a screen edge to snap.');
     },
     [openApp, notify]
   );
 
   const exitToRoom = useCallback(() => {
     soundEngine.playTransitionSwoosh();
+    setCameraPose('OVERVIEW');
     setExperienceState('EXPLORING');
   }, []);
 
@@ -295,8 +402,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     soundEngine.playMouseClick();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const topOffset = 40; // Top status bar height
-    const bottomDock = 68; // Bottom dock height
+    const topOffset = 40;
+    const bottomDock = 68;
     const usableH = Math.max(320, vh - topOffset - bottomDock);
 
     setWindows((prev) =>
@@ -329,7 +436,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             height: usableH - 8,
           };
         }
-        // top -> maximize
         return {
           ...w,
           restoreBounds,
@@ -389,6 +495,22 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         powerOnPC,
         skipToDesktop,
         exitToRoom,
+        cameraPose,
+        setCameraPose,
+        roomLightsOn,
+        setRoomLightsOn,
+        devices,
+        setDevices,
+        toggleDeviceState,
+        phoneCharging,
+        setPhoneCharging,
+        togglePhoneCharging,
+        batteryLevel,
+        gamingMode,
+        setGamingMode,
+        toggleGamingMode,
+        steeringAngle,
+        setSteeringAngle,
         reducedMotion,
         setReducedMotion,
         windows,

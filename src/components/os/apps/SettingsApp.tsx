@@ -8,9 +8,9 @@ import { PROFILE } from '../../../data/portfolioData';
 import { soundEngine } from '../../../audio/soundEngine';
 
 const WALLPAPERS: { id: WallpaperId; label: string; thumb?: string }[] = [
-  { id: 'sonoma', label: 'macOS Aurora' },
+  { id: 'sonoma', label: 'macOS Oceanic' },
   { id: 'obsidian', label: 'Obsidian Grid' },
-  { id: 'room-iso', label: 'Periwinkle Studio' },
+  { id: 'room-iso', label: 'Slate Studio' },
   { id: 'setup-dark', label: 'Dark PC Rig Photo', thumb: PROFILE.setupPhotoDark },
   { id: 'setup-neon', label: 'Ambient Dual-Monitor Photo', thumb: PROFILE.setupPhotoNeon },
   { id: 'grid', label: 'Architectural Dot Grid' },
@@ -65,7 +65,7 @@ export function SettingsApp() {
                   <div
                     className={`w-full h-full ${
                       wp.id === 'sonoma'
-                        ? 'bg-gradient-to-br from-[#312E81] via-[#0F172A] to-[#0891B2]'
+                        ? 'bg-gradient-to-br from-[#061830] via-[#0B2B52] to-[#0284C7]'
                         : wp.id === 'obsidian'
                           ? 'bg-gradient-to-br from-[#0B1222] via-[#07090F] to-[#111827]'
                           : 'bg-[#07090F] bg-[radial-gradient(#38BDF833_1px,transparent_1px)] [background-size:14px_14px]'
@@ -124,7 +124,7 @@ export function SettingsApp() {
               onClick={() => setReducedMotion((r) => !r)}
               className={`px-3 py-1.5 rounded-md text-xs font-semibold ${
                 reducedMotion
-                  ? 'bg-[#8B5CF6] text-white'
+                  ? 'bg-[#38BDF8] text-[#07080B]'
                   : 'bg-[#161B26] text-[#9CA3AF]'
               }`}
             >

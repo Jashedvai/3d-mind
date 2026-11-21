@@ -200,7 +200,7 @@ export const JOURNEY_MILESTONES: JourneyMilestone[] = [
       'Debugging systematically rather than guessing',
     ],
     technologies: ['Java', 'Python', 'SQL'],
-    accentHex: '#818CF8',
+    accentHex: '#38BDF8',
   },
   {
     index: '04',
@@ -213,7 +213,7 @@ export const JOURNEY_MILESTONES: JourneyMilestone[] = [
       'First collaborative team software packaged with clean MVC boundaries',
     ],
     technologies: ['Java SE', 'Swing', 'Custom UI'],
-    accentHex: '#A78BFA',
+    accentHex: '#2DD4BF',
   },
   {
     index: '05',
@@ -252,7 +252,7 @@ export const JOURNEY_MILESTONES: JourneyMilestone[] = [
       'Designed OpenCV edge-masking in panelcolour to preserve crisp manga ink',
     ],
     technologies: ['YOLOv8', 'PaddleOCR', 'OpenCV'],
-    accentHex: '#8B5CF6',
+    accentHex: '#0A84FF',
   },
   {
     index: '08',
@@ -273,8 +273,8 @@ export const JOURNEY_MILESTONES: JourneyMilestone[] = [
     phase: 'Current Lab',
     summary: 'Uniting Three.js 3D architectural spaces, metallic AHJ sculptures, and Glassmorphism Virtual OS.',
     highlights: [
-      'Built an interactive 12×10×9 ft dark tech bedroom with GSAP camera glide',
-      'Crafted a glassmorphism JashedOS featuring drag-to-snap windows & Web Audio FFT',
+      'Built an interactive 14×16 ft (224 sq. ft.) sim-racing & developer studio with GSAP camera glide',
+      'Crafted a Liquid Glass JashedOS featuring drag-to-snap windows & Web Audio FFT',
       'Designed the custom metallic AHJ 3D monogram and ascending staircase',
     ],
     technologies: ['Three.js', 'GSAP', 'Web Audio API'],
@@ -348,7 +348,7 @@ export const PROJECTS: ProjectItem[] = [
     features: [
       'Delivered Phase 1 Django backend with secure user authentication, profile views, and role-based access scaffolding',
       'Dark executive cockpit structuring product catalog, vendor purchase, customer sales, and low-stock modules',
-      'Relational schema designed for seamless transition from SQLite in local dev to MySQL in multi-module production',
+      'Relational schema designed for direct transition from SQLite in local dev to MySQL in multi-module production',
     ],
     stack: ['Python', 'Django', 'SQLite', 'MySQL', 'HTML5', 'CSS3', 'JavaScript'],
     problem:

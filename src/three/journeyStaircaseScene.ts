@@ -97,7 +97,7 @@ export function mountJourneyStaircaseScene(
   pmrem.dispose();
 
   // Studio Lighting
-  const hemi = new THREE.HemisphereLight(0xa5b4fc, 0x0b0e17, 0.85);
+  const hemi = new THREE.HemisphereLight(0xbae6fd, 0x0b0e17, 0.85);
   scene.add(hemi);
 
   const keyLight = new THREE.DirectionalLight(0xf8fafc, 2.0);
@@ -106,12 +106,12 @@ export function mountJourneyStaircaseScene(
   keyLight.shadow.mapSize.set(1024, 1024);
   scene.add(keyLight);
 
-  const focusSpot = new THREE.PointLight(0x8b5cf6, 3.2, 8, 1.5);
+  const focusSpot = new THREE.PointLight(0x38bdf8, 3.2, 8, 1.5);
   focusSpot.position.set(0, 3, 2);
   scene.add(focusSpot);
 
   // Reflective Horizon Grid Floor
-  const gridTex = createHorizonGridTexture('rgba(139, 92, 246, 0.34)', 'rgba(148, 163, 184, 0.08)', '#06080f');
+  const gridTex = createHorizonGridTexture('rgba(56, 189, 248, 0.34)', 'rgba(148, 163, 184, 0.08)', '#06080f');
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(60, 60),
     new THREE.MeshStandardMaterial({

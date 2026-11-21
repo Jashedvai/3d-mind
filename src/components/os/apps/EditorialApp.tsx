@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Facebook,
   Github,
+  Info,
   Instagram,
   Layers,
   Mail,
@@ -33,6 +34,7 @@ import {
   TOOLKIT_GROUPS,
 } from '../../../data/portfolioData';
 import { soundEngine } from '../../../audio/soundEngine';
+import { useIntersectionObserver } from '../../../hooks/useIntersectionObserver';
 import { isWebGLAvailable } from '../../../three/webglUtils';
 import {
   AhjHeroController,
@@ -59,16 +61,20 @@ export function EditorialApp() {
   const interestsRef = useRef<HTMLElement | null>(null);
   const contactRef = useRef<HTMLElement | null>(null);
 
-  // AHJ 3D Hero Scene state
+  // AHJ 3D Hero Scene state (IntersectionObserver-gated GPU lifecycle)
   const heroHostRef = useRef<HTMLDivElement | null>(null);
   const heroCtrlRef = useRef<AhjHeroController | null>(null);
+  const { ref: heroObserverRef, isIntersecting: isHeroVisible } =
+    useIntersectionObserver<HTMLDivElement>({ threshold: 0.05, rootMargin: '80px' });
   const [heroWebglFailed, setHeroWebglFailed] = useState<boolean>(() => !isWebGLAvailable());
   const [heroMode, setHeroMode] = useState<HeroInteractionMode>('pointer');
   const [heroAutoRotate, setHeroAutoRotate] = useState(true);
 
-  // Desktop 3D Journey Staircase state
+  // Desktop 3D Journey Staircase state (IntersectionObserver-gated GPU lifecycle)
   const staircaseHostRef = useRef<HTMLDivElement | null>(null);
   const staircaseCtrlRef = useRef<JourneyStaircaseController | null>(null);
+  const { ref: staircaseObserverRef, isIntersecting: isStaircaseVisible } =
+    useIntersectionObserver<HTMLDivElement>({ threshold: 0.05, rootMargin: '80px' });
   const [staircaseWebglFailed, setStaircaseWebglFailed] = useState<boolean>(
     () => !isWebGLAvailable()
   );
@@ -101,16 +107,16 @@ export function EditorialApp() {
     return () => mq.removeEventListener('change', onChange);
   }, []);
 
-  // Mount Custom AHJ 3D Hero Scene (Periwinkle Cutout Backdrop)
+  // Mount Custom AHJ 3D Hero Scene only while visible in viewport
   useEffect(() => {
     const host = heroHostRef.current;
-    if (!host || heroWebglFailed) return;
+    if (!host || heroWebglFailed || !isHeroVisible) return;
 
     try {
       const ctrl = mountAhjHeroScene({
         container: host,
         accentHex,
-        backgroundHex: '#746EF4',
+        backgroundHex: '#162338',
         reducedMotion,
         onContextLost: () => setHeroWebglFailed(true),
       });
@@ -118,12 +124,13 @@ export function EditorialApp() {
       return () => {
         ctrl.dispose();
         heroCtrlRef.current = null;
+        host.innerHTML = '';
       };
     } catch {
       setHeroWebglFailed(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [heroWebglFailed]);
+  }, [heroWebglFailed, isHeroVisible]);
 
   useEffect(() => {
     heroCtrlRef.current?.setAccentColor(accentHex);
@@ -141,10 +148,10 @@ export function EditorialApp() {
     heroCtrlRef.current?.setAutoRotate(heroAutoRotate);
   }, [heroAutoRotate]);
 
-  // Mount Desktop 3D Journey Staircase Scene (only on >= md desktop viewports)
+  // Mount Desktop 3D Journey Staircase Scene only on >= md viewports and while visible
   useEffect(() => {
     const host = staircaseHostRef.current;
-    if (!host || staircaseWebglFailed || !isDesktopViewport) return;
+    if (!host || staircaseWebglFailed || !isDesktopViewport || !isStaircaseVisible) return;
 
     try {
       const ctrl = mountJourneyStaircaseScene({
@@ -157,12 +164,13 @@ export function EditorialApp() {
       return () => {
         ctrl.dispose();
         staircaseCtrlRef.current = null;
+        host.innerHTML = '';
       };
     } catch {
       setStaircaseWebglFailed(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [staircaseWebglFailed, isDesktopViewport]);
+  }, [staircaseWebglFailed, isDesktopViewport, isStaircaseVisible]);
 
   useEffect(() => {
     staircaseCtrlRef.current?.selectMilestone(selectedStep);
@@ -248,10 +256,10 @@ export function EditorialApp() {
         <button
           type="button"
           onClick={() => scrollToSection(overviewRef)}
-          className="font-display font-extrabold text-base sm:text-lg tracking-tight text-white whitespace-nowrap shrink-0"
+          className="font-display font-semibold text-base sm:text-lg tracking-tight text-white whitespace-nowrap shrink-0"
         >
           {PROFILE.initials}
-          <span style={{ color: '#746EF4' }}>.dev</span>
+          <span style={{ color: accentHex }}>.dev</span>
         </button>
 
         <nav
@@ -320,19 +328,22 @@ export function EditorialApp() {
         <section ref={overviewRef} className="space-y-6 scroll-mt-16">
           <div className="rounded-3xl bg-[#101114] border border-white/[0.14] shadow-[0_28px_80px_rgba(0,0,0,0.65)] p-4 sm:p-6 space-y-4 overflow-hidden">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-              {/* LEFT: Rounded Periwinkle #746EF4 Panel with Custom 3D AHJ Monogram */}
-              <div className="lg:col-span-7 relative rounded-2xl bg-[#746EF4] overflow-hidden min-h-[300px] sm:min-h-[370px] flex flex-col">
+              {/* LEFT: Cool Slate-Cobalt 3D Cutout Panel with Custom 3D AHJ Monogram */}
+              <div
+                ref={heroObserverRef}
+                className="lg:col-span-7 relative rounded-2xl bg-[#162338] overflow-hidden min-h-[300px] sm:min-h-[370px] flex flex-col"
+              >
                 {/* Top-Left Geometric Corner Cutout Mark */}
                 <div className="absolute top-0 left-0 z-10 bg-[#101114] pr-4 pb-3 pt-1 pl-1.5 rounded-br-2xl flex items-center gap-1.5">
                   <div className="grid grid-cols-2 gap-1 font-mono text-xs leading-none text-white/90 tracking-widest">
-                    <span className="border border-white/60 px-1 py-0.5 rounded-[3px]">0</span>
-                    <span className="border border-white/60 px-1 py-0.5 rounded-[3px]">1</span>
-                    <span className="border border-white/60 px-1 py-0.5 rounded-[3px]">A</span>
-                    <span className="border border-white/60 px-1 py-0.5 rounded-[3px]">J</span>
+                    <span className="border border-white/50 px-1 py-0.5 rounded-[3px]">0</span>
+                    <span className="border border-white/50 px-1 py-0.5 rounded-[3px]">1</span>
+                    <span className="border border-white/50 px-1 py-0.5 rounded-[3px]">A</span>
+                    <span className="border border-white/50 px-1 py-0.5 rounded-[3px]">J</span>
                   </div>
                 </div>
 
-                {/* 3D WebGL Canvas OR Clean Chrome SVG Fallback */}
+                {/* 3D WebGL Canvas OR Clean Standby / SVG Fallback */}
                 <div className="flex-1 relative">
                   {!heroWebglFailed ? (
                     <div
@@ -342,15 +353,15 @@ export function EditorialApp() {
                     />
                   ) : (
                     <div className="w-full h-[270px] sm:h-[330px] flex flex-col items-center justify-center p-6 text-center">
-                      <div className="font-display text-6xl sm:text-7xl font-extrabold tracking-[0.18em] text-[#101114]">
+                      <div className="font-display text-6xl sm:text-7xl font-bold tracking-[0.18em] text-white/90">
                         AHJ
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* Bottom-Right Notched Tag inside Periwinkle Panel */}
-                <div className="flex items-end justify-between bg-[#746EF4]">
+                {/* Bottom-Right Notched Tag inside Slate-Cobalt Panel */}
+                <div className="flex items-end justify-between bg-[#162338]">
                   <div className="px-3 py-2 flex items-center gap-1.5">
                     <button
                       type="button"
@@ -382,9 +393,9 @@ export function EditorialApp() {
 
                   <div className="bg-[#101114] pl-4 pr-3 pt-2.5 pb-1.5 rounded-tl-2xl text-right">
                     <span className="text-[10px] sm:text-[11px] font-mono tracking-wider text-white/75 mr-1.5">
-                      I GO BY
+                      Role
                     </span>
-                    <span className="font-display text-sm sm:text-base font-bold text-white">
+                    <span className="font-display text-sm sm:text-base font-semibold text-white">
                       Creative Developer
                     </span>
                   </div>
@@ -429,7 +440,7 @@ export function EditorialApp() {
                     <button
                       type="button"
                       onClick={() => scrollToSection(projectsRef)}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#746EF4] hover:bg-[#847EF8] text-white text-xs font-bold transition-colors whitespace-nowrap shrink-0 min-h-[38px]"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#38BDF8] hover:bg-[#7DD3FC] text-[#070912] text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[38px]"
                     >
                       <Layers className="w-3.5 h-3.5" aria-hidden="true" />
                       <span>7 Projects</span>
@@ -537,8 +548,8 @@ export function EditorialApp() {
                   key={diff.title}
                   className="p-4 rounded-2xl bg-white/[0.05] backdrop-blur-xl border border-white/[0.12] space-y-1.5 flex flex-col justify-between"
                 >
-                  <p className="text-xs font-mono text-[#746EF4] tabular-nums">0{i + 1}</p>
-                  <h2 className="font-display text-sm font-bold text-white">{diff.title}</h2>
+                  <p className="text-xs font-mono text-[#38BDF8] tabular-nums">0{i + 1}</p>
+                  <h2 className="font-display text-sm font-semibold text-white">{diff.title}</h2>
                   <p className="text-[11px] text-[#A1A7B3] leading-relaxed">{diff.detail}</p>
                 </div>
               ))}
@@ -586,14 +597,20 @@ export function EditorialApp() {
 
           {/* DESKTOP: Interactive 3D Journey Staircase */}
           <div className="hidden md:block space-y-4">
-            {!staircaseWebglFailed ? (
-              <div className="relative rounded-2xl overflow-hidden border border-white/[0.14] bg-[#06080F] h-[300px]">
-                <div ref={staircaseHostRef} className="w-full h-full" />
-                <div className="px-3 py-1 rounded bg-[#07090E]/90 border border-white/10 text-[11px] font-mono text-[#9CA3AF] absolute bottom-3 left-3 pointer-events-none">
-                  Drag to orbit · Click any glowing 3D step
+            <div ref={staircaseObserverRef}>
+              {!staircaseWebglFailed ? (
+                <div className="relative rounded-2xl overflow-hidden border border-white/[0.14] bg-[#06080F] h-[300px]">
+                  <div ref={staircaseHostRef} className="w-full h-full" />
+                  {!isStaircaseVisible && (
+                    <div className="absolute inset-0 flex items-center justify-center text-xs font-mono text-[#9CA3AF]">
+                      3D Staircase standby
+                    </div>
+                  )}
+                  <div className="px-3 py-1 rounded bg-[#07090E]/90 border border-white/10 text-[11px] font-mono text-[#9CA3AF] absolute bottom-3 left-3 pointer-events-none">
+                    Drag to orbit · Click any 3D step
+                  </div>
                 </div>
-              </div>
-            ) : (
+              ) : (
               <div className="p-4 rounded-2xl bg-white/[0.05] border border-white/[0.12] grid grid-cols-10 gap-1.5 items-end h-[160px]">
                 {JOURNEY_MILESTONES.map((m, idx) => (
                   <button
@@ -614,7 +631,8 @@ export function EditorialApp() {
                   </button>
                 ))}
               </div>
-            )}
+              )}
+            </div>
 
             {/* Quick Step Strip */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
@@ -720,13 +738,14 @@ export function EditorialApp() {
               <button
                 key={project.id}
                 type="button"
+                aria-describedby={`project-challenge-${project.id}`}
                 onClick={() => openProjectPopup(project)}
-                className={`group text-left rounded-2xl bg-white/[0.06] hover:bg-white/[0.09] backdrop-blur-xl border border-white/[0.14] hover:border-[#38BDF8]/60 transition-all overflow-hidden flex flex-col justify-between ${
+                className={`group relative text-left rounded-2xl bg-white/[0.06] hover:bg-white/[0.09] backdrop-blur-xl border border-white/[0.14] hover:border-[#38BDF8]/60 transition-colors overflow-hidden flex flex-col justify-between ${
                   idx === 0 && projectFilter === 'All' ? 'md:col-span-2 lg:col-span-2' : ''
                 }`}
               >
                 <div
-                  className={`w-full bg-[#070A12] border-b border-white/[0.1] overflow-hidden ${
+                  className={`relative w-full bg-[#070A12] border-b border-white/[0.1] overflow-hidden ${
                     idx === 0 && projectFilter === 'All' ? 'aspect-[16/8]' : 'aspect-[16/10]'
                   }`}
                 >
@@ -738,13 +757,36 @@ export function EditorialApp() {
                       onError={() =>
                         setBrokenImages((prev) => ({ ...prev, [project.id]: true }))
                       }
-                      className="w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-[1.03]"
+                      className={`w-full h-full object-cover object-top ${
+                        reducedMotion
+                          ? ''
+                          : 'transition-transform duration-500 group-hover:scale-[1.03]'
+                      }`}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center p-4 text-xs font-mono text-[#9CA3AF]">
                       {project.title}
                     </div>
                   )}
+
+                  {/* Hover & focus tooltip summarizing the core challenge solved */}
+                  <div
+                    id={`project-challenge-${project.id}`}
+                    role="tooltip"
+                    className={`pointer-events-none absolute inset-x-3 bottom-3 z-10 rounded-xl border border-white/20 bg-[#0E1117]/95 p-3 shadow-lg shadow-black/60 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 ${
+                      reducedMotion
+                        ? 'transition-opacity duration-75'
+                        : 'translate-y-1.5 group-hover:translate-y-0 group-focus-visible:translate-y-0 transition-all duration-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#38BDF8] mb-1">
+                      <Info className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                      <span>Core challenge solved</span>
+                    </div>
+                    <p className="text-xs text-[#E5E7EB] leading-snug line-clamp-3">
+                      {project.problem}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="p-4 sm:p-5 space-y-2.5 flex-1 flex flex-col justify-between">
@@ -827,11 +869,8 @@ export function EditorialApp() {
                       </div>
                       <div className="h-1.5 w-full rounded-full bg-white/[0.08] overflow-hidden">
                         <div
-                          className="h-full rounded-full"
-                          style={{
-                            width: `${item.ratio}%`,
-                            background: `linear-gradient(90deg, #38BDF8, ${accentHex})`,
-                          }}
+                          className="h-full rounded-full bg-[#38BDF8]"
+                          style={{ width: `${item.ratio}%` }}
                         />
                       </div>
                       <p className="text-[11px] text-[#9CA3AF]">{item.note}</p>
@@ -1077,6 +1116,11 @@ export function EditorialApp() {
             </div>
           </div>
         </section>
+
+        <footer className="pt-4 border-t border-white/[0.08] flex flex-wrap items-center justify-between gap-2 text-xs text-[#9CA3AF]">
+          <span>© 2026 Md. Ahsanul Haque Jashed</span>
+          <span className="font-mono">Chittagong, Bangladesh</span>
+        </footer>
       </div>
 
       {/* =========================================================

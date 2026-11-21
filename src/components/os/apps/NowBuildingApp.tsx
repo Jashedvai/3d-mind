@@ -9,7 +9,7 @@ export function NowBuildingApp() {
     <div className="p-5 sm:p-7 space-y-7 text-[#F4F5F7]">
       <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-white/[0.08]">
         <div>
-          <p className="text-xs font-mono text-[#8B5CF6]">Current Work &amp; Roadmap</p>
+          <p className="text-xs font-mono text-[#38BDF8]">Current Work &amp; Roadmap</p>
           <h2 className="font-display text-xl sm:text-2xl font-bold">Now Building</h2>
         </div>
         <button
@@ -42,7 +42,7 @@ export function NowBuildingApp() {
 
             <div className="h-1.5 w-full rounded-full bg-white/[0.08] overflow-hidden">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#38BDF8]"
+                className="h-full rounded-full bg-[#38BDF8]"
                 style={{ width: `${item.progress}%` }}
               />
             </div>
@@ -53,7 +53,7 @@ export function NowBuildingApp() {
                 {item.activeTasks.map((task) => (
                   <li key={task} className="flex items-start gap-2">
                     <CheckCircle2
-                      className="w-4 h-4 text-[#8B5CF6] shrink-0 mt-0.5"
+                      className="w-4 h-4 text-[#38BDF8] shrink-0 mt-0.5"
                       aria-hidden="true"
                     />
                     <span>{task}</span>

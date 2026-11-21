@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
 import { JOURNEY_MILESTONES } from '../../../data/portfolioData';
+import { useIntersectionObserver } from '../../../hooks/useIntersectionObserver';
 import { isWebGLAvailable } from '../../../three/webglUtils';
 import {
   JourneyStaircaseController,
@@ -17,6 +18,8 @@ export function JourneyApp() {
 
   const canvasHostRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<JourneyStaircaseController | null>(null);
+  const { ref: staircaseObserverRef, isIntersecting: isStaircaseVisible } =
+    useIntersectionObserver<HTMLDivElement>({ threshold: 0.05, rootMargin: '60px' });
 
   const active = JOURNEY_MILESTONES[selected];
   const show3D = !webglFailed && !use2DFallback && isDesktopViewport;
@@ -31,7 +34,7 @@ export function JourneyApp() {
 
   useEffect(() => {
     const host = canvasHostRef.current;
-    if (!host || !show3D) return;
+    if (!host || !show3D || !isStaircaseVisible) return;
 
     try {
       const controller = mountJourneyStaircaseScene({
@@ -44,12 +47,13 @@ export function JourneyApp() {
       return () => {
         controller.dispose();
         controllerRef.current = null;
+        host.innerHTML = '';
       };
     } catch {
       setWebglFailed(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [show3D]);
+  }, [show3D, isStaircaseVisible]);
 
   useEffect(() => {
     controllerRef.current?.selectMilestone(selected);
@@ -102,14 +106,20 @@ export function JourneyApp() {
 
       {/* DESKTOP: Interactive 3D Ascending Staircase + Active Details */}
       <div className="hidden md:block space-y-5">
-        {show3D ? (
-          <div className="relative rounded-2xl overflow-hidden border border-white/[0.14] bg-[#06080F] h-[280px]">
-            <div ref={canvasHostRef} className="w-full h-full" />
-            <div className="absolute bottom-2.5 left-3 px-2.5 py-1 rounded bg-[#07090E]/85 border border-white/10 text-[11px] font-mono text-[#9CA3AF] pointer-events-none">
-              Drag to orbit · Click any 3D step
+        <div ref={staircaseObserverRef}>
+          {show3D ? (
+            <div className="relative rounded-2xl overflow-hidden border border-white/[0.14] bg-[#06080F] h-[280px]">
+              <div ref={canvasHostRef} className="w-full h-full" />
+              {!isStaircaseVisible && (
+                <div className="absolute inset-0 flex items-center justify-center text-xs font-mono text-[#9CA3AF]">
+                  3D Staircase standby
+                </div>
+              )}
+              <div className="px-3 py-1 rounded bg-[#07090E]/85 border border-white/10 text-[11px] font-mono text-[#9CA3AF] absolute bottom-2.5 left-3 pointer-events-none">
+                Drag to orbit · Click any 3D step
+              </div>
             </div>
-          </div>
-        ) : (
+          ) : (
           <div className="p-4 rounded-2xl bg-white/[0.05] border border-white/[0.12]">
             <div className="grid grid-cols-10 gap-1.5 items-end h-[180px]">
               {JOURNEY_MILESTONES.map((m, idx) => {
@@ -144,7 +154,8 @@ export function JourneyApp() {
               })}
             </div>
           </div>
-        )}
+          )}
+        </div>
 
         {/* Quick Step Selector Strip (01–10) */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">

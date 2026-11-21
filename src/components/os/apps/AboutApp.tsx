@@ -39,7 +39,7 @@ export function AboutApp() {
             {PROFILE.fullName}
           </h2>
           <p className="text-sm text-[#D1D5DB]">{PROFILE.role}</p>
-          <p className="text-xs font-mono text-[#A78BFA]">{PROFILE.education}</p>
+          <p className="text-xs font-mono text-[#9CA3AF]">{PROFILE.education}</p>
           <div className="flex flex-wrap items-center gap-3 pt-1 text-xs font-mono text-[#9CA3AF]">
             <span className="inline-flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-[#38BDF8]" aria-hidden="true" />

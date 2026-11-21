@@ -34,7 +34,7 @@ import {
 import { ACCENT_COLORS, AppId, useWorkspace } from '../../context/WorkspaceContext';
 import { NOW_BUILDING, PROFILE, PROJECTS } from '../../data/portfolioData';
 import { soundEngine } from '../../audio/soundEngine';
-import { WindowFrame } from './WindowFrame';
+import { WindowManager } from './WindowManager/WindowManager';
 import { VirtualKeyboard } from './VirtualKeyboard';
 import { EditorialApp } from './apps/EditorialApp';
 import { AboutApp } from './apps/AboutApp';
@@ -60,20 +60,20 @@ interface AppIconMeta {
 }
 
 const DESKTOP_APPS: AppIconMeta[] = [
-  { id: 'editorial', label: 'AHJ Studio', gradient: 'from-slate-600 via-zinc-800 to-black', icon: Globe },
-  { id: 'about', label: 'About Me', gradient: 'from-sky-400 to-blue-600', icon: User },
-  { id: 'projects', label: 'Projects', gradient: 'from-violet-500 to-indigo-600', icon: Layers },
-  { id: 'journey', label: '3D Journey', gradient: 'from-cyan-400 to-teal-600', icon: Compass },
-  { id: 'now', label: 'Now Building', gradient: 'from-fuchsia-500 to-purple-600', icon: Rocket },
-  { id: 'skills', label: 'Skills', gradient: 'from-amber-400 to-orange-600', icon: SlidersHorizontal },
+  { id: 'editorial', label: 'AHJ Studio', gradient: 'from-sky-500 to-blue-700', icon: Globe },
+  { id: 'about', label: 'About Me', gradient: 'from-cyan-500 to-sky-700', icon: User },
+  { id: 'projects', label: 'Projects', gradient: 'from-blue-500 to-slate-800', icon: Layers },
+  { id: 'journey', label: '3D Journey', gradient: 'from-cyan-500 to-teal-700', icon: Compass },
+  { id: 'now', label: 'Now Building', gradient: 'from-sky-400 to-blue-800', icon: Rocket },
+  { id: 'skills', label: 'Skills', gradient: 'from-amber-500 to-orange-700', icon: SlidersHorizontal },
   { id: 'terminal', label: 'Terminal', gradient: 'from-zinc-700 to-zinc-900', icon: TerminalIcon },
-  { id: 'contact', label: 'Messages', gradient: 'from-emerald-400 to-green-600', icon: MessageSquare },
-  { id: 'music', label: 'Music', gradient: 'from-rose-500 to-pink-600', icon: Music },
-  { id: 'browser', label: 'Safari', gradient: 'from-blue-400 to-cyan-600', icon: Monitor },
-  { id: 'explorer', label: 'Finder', gradient: 'from-sky-300 to-blue-500', icon: Folder },
-  { id: 'notepad', label: 'Notes', gradient: 'from-yellow-400 to-amber-500', icon: FileText },
-  { id: 'resume', label: 'Preview', gradient: 'from-indigo-400 to-blue-700', icon: FileText },
-  { id: 'settings', label: 'Settings', gradient: 'from-slate-500 to-slate-700', icon: Settings },
+  { id: 'contact', label: 'Messages', gradient: 'from-emerald-500 to-green-700', icon: MessageSquare },
+  { id: 'music', label: 'Music', gradient: 'from-rose-500 to-red-700', icon: Music },
+  { id: 'browser', label: 'Safari', gradient: 'from-blue-500 to-sky-700', icon: Monitor },
+  { id: 'explorer', label: 'Finder', gradient: 'from-sky-400 to-blue-600', icon: Folder },
+  { id: 'notepad', label: 'Notes', gradient: 'from-amber-400 to-yellow-600', icon: FileText },
+  { id: 'resume', label: 'Preview', gradient: 'from-slate-500 to-slate-700', icon: FileText },
+  { id: 'settings', label: 'Settings', gradient: 'from-zinc-600 to-zinc-800', icon: Settings },
 ];
 
 const MAC_DOCK_PINNED: AppId[] = [
@@ -94,7 +94,6 @@ export function DesktopOS() {
   const {
     windows,
     activeWindowId,
-    snapPreview,
     openApp,
     focusApp,
     minimizeApp,
@@ -243,17 +242,12 @@ export function DesktopOS() {
 
   return (
     <div className="relative w-full h-[100dvh] overflow-hidden bg-[#070912] text-[#F4F5F7] select-none">
-      {/* Apple macOS Sonoma / iOS Aurora Wallpaper Layer */}
+      {/* macOS Tahoe Oceanic Liquid Glass Desktop Wallpaper (Zero Purple) */}
       {wallpaper === 'sonoma' && (
         <div
           className="absolute inset-0"
           style={{
-            background: `
-              radial-gradient(ellipse 80% 55% at 22% 18%, ${accentHex}44, transparent 60%),
-              radial-gradient(ellipse 70% 50% at 82% 24%, rgba(56, 189, 248, 0.30), transparent 60%),
-              radial-gradient(ellipse 90% 60% at 50% 88%, rgba(236, 72, 153, 0.22), transparent 62%),
-              linear-gradient(155deg, #060916 0%, #12102b 48%, #071322 100%)
-            `,
+            background: `radial-gradient(circle at 18% 22%, rgba(56, 189, 248, 0.34), transparent 50%), radial-gradient(circle at 82% 28%, rgba(10, 132, 255, 0.42), transparent 54%), radial-gradient(circle at 52% 84%, rgba(14, 165, 233, 0.24), transparent 55%), linear-gradient(145deg, #061830 0%, #0B2B52 48%, #041022 100%)`,
           }}
         />
       )}
@@ -281,11 +275,7 @@ export function DesktopOS() {
         <div
           className="absolute inset-0"
           style={{
-            background: `
-              radial-gradient(ellipse 75% 55% at 28% 30%, rgba(116, 110, 244, 0.36), transparent 62%),
-              radial-gradient(ellipse 65% 50% at 80% 72%, rgba(56, 189, 248, 0.18), transparent 60%),
-              linear-gradient(150deg, #07080F 0%, #101223 55%, #090B14 100%)
-            `,
+            background: `radial-gradient(circle at 26% 24%, rgba(56, 189, 248, 0.26), transparent 50%), radial-gradient(circle at 78% 72%, rgba(148, 163, 184, 0.22), transparent 52%), linear-gradient(150deg, #0F172A 0%, #111827 55%, #090D16 100%)`,
           }}
         />
       )}
@@ -396,10 +386,10 @@ export function DesktopOS() {
               setSpotlightQuery('');
             }}
             className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md hover:bg-white/12 transition-colors whitespace-nowrap shrink-0"
-            title="Spotlight Search (⌘K)"
+            title="Spotlight Search"
           >
             <Search className="w-3.5 h-3.5" />
-            <span className="text-[11px] font-mono text-white/65">⌘K</span>
+            <span className="text-[11px] font-mono text-white/75">⌘K</span>
           </button>
 
           <Wifi className="w-3.5 h-3.5 text-white/80 shrink-0" aria-hidden="true" />
@@ -627,25 +617,13 @@ export function DesktopOS() {
         </section>
       </main>
 
-      {/* Drag-to-Snap Translucent Frosted Preview Overlay */}
-      {snapPreview !== 'none' && (
-        <div
-          className={`hidden md:block fixed z-[85] rounded-[22px] border border-white/35 bg-white/[0.14] backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.3)] pointer-events-none transition-all duration-150 ${
-            snapPreview === 'left'
-              ? 'left-2 top-10 bottom-[86px] w-[calc(50vw-12px)]'
-              : snapPreview === 'right'
-                ? 'right-2 top-10 bottom-[86px] w-[calc(50vw-12px)]'
-                : 'inset-x-2 top-10 bottom-[86px]'
-          }`}
-        />
-      )}
+      {/* Copyright Jashed Studio Strip */}
+      <div className="hidden md:block fixed bottom-3 right-4 z-[80] text-[11px] font-mono text-white/45 pointer-events-none">
+        © 2026 Jashed
+      </div>
 
-      {/* Active Windows (macOS floating/snapped OR iOS mobile sheets) */}
-      {openWindows.map((win) => (
-        <WindowFrame key={win.id} win={win}>
-          {renderAppContent(win.id)}
-        </WindowFrame>
-      ))}
+      {/* Centralized Window Manager (Active Windows + Drag-to-Snap Overlay) */}
+      <WindowManager renderAppContent={renderAppContent} />
 
       {/* Virtual Mechanical Keyboard */}
       <VirtualKeyboard />
@@ -805,7 +783,7 @@ export function DesktopOS() {
             {/* Now Playing Liquid Glass Tile */}
             <div className="p-3 rounded-[22px] bg-white/[0.09] border border-white/[0.16] shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] flex flex-col justify-between">
               <div className="flex items-start justify-between gap-2">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500/70 to-fuchsia-500/70 border border-white/25 flex items-center justify-center shadow-inner">
+                <div className="w-9 h-9 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center">
                   <Headphones className="w-4 h-4 text-white" />
                 </div>
                 <button
@@ -1153,7 +1131,7 @@ export function DesktopOS() {
             {extraTaskbarWindows.map((win) => {
               const meta = DESKTOP_APPS.find((a) => a.id === win.id);
               const Icon = meta?.icon || Layers;
-              const gradient = meta?.gradient || 'from-indigo-500 to-violet-600';
+              const gradient = meta?.gradient || 'from-slate-600 to-slate-800';
               const isActive = activeWindowId === win.id && !win.isMinimized;
               const shortLabel = meta?.label || win.title.split('—')[0].trim();
               return (

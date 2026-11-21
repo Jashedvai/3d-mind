@@ -163,7 +163,7 @@ export function mountAhjHeroScene(options: AhjHeroOptions): AhjHeroController {
   // Lighting Rig
   const accentColor = new THREE.Color(accentHex);
 
-  const hemiLight = new THREE.HemisphereLight(isCutoutMode ? 0xe0e7ff : 0x93c5fd, 0x090b12, 0.85);
+  const hemiLight = new THREE.HemisphereLight(isCutoutMode ? 0xe2e8f0 : 0x93c5fd, 0x090b12, 0.85);
   scene.add(hemiLight);
 
   const keyLight = new THREE.DirectionalLight(0xffffff, isCutoutMode ? 3.2 : 2.5);
@@ -181,14 +181,14 @@ export function mountAhjHeroScene(options: AhjHeroOptions): AhjHeroController {
   rimLightCyan.position.set(-4.5, 3.2, -3.5);
   scene.add(rimLightCyan);
 
-  const rimLightViolet = new THREE.PointLight(
-    isCutoutMode ? 0xbe123c : 0x8b5cf6,
+  const rimLightCobalt = new THREE.PointLight(
+    isCutoutMode ? 0x0284c7 : 0x0a84ff,
     isCutoutMode ? 4.4 : 2.8,
     12,
     1.4
   );
-  rimLightViolet.position.set(4.2, 1.6, -2.6);
-  scene.add(rimLightViolet);
+  rimLightCobalt.position.set(4.2, 1.6, -2.6);
+  scene.add(rimLightCobalt);
 
   const arcMat = new THREE.MeshBasicMaterial({
     color: accentColor,

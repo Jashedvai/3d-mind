@@ -11,26 +11,13 @@ import {
 } from 'lucide-react';
 import {
   OSWindowState,
-  SnapZone,
   useWorkspace,
 } from '../../context/WorkspaceContext';
+import { detectSnapZone } from './WindowManager/WindowManager';
 
 interface WindowFrameProps {
   win: OSWindowState;
   children: React.ReactNode;
-}
-
-function detectSnapZone(clientX: number, clientY: number): SnapZone {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const leftThreshold = vw * 0.05;
-  const rightThreshold = vw * 0.95;
-  const topThreshold = Math.max(44, vh * 0.05);
-
-  if (clientX <= leftThreshold) return 'left';
-  if (clientX >= rightThreshold) return 'right';
-  if (clientY <= topThreshold) return 'top';
-  return 'none';
 }
 
 export function WindowFrame({ win, children }: WindowFrameProps) {

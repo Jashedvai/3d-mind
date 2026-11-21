@@ -2,70 +2,41 @@ import * as THREE from 'three';
 import gsap from 'gsap';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
-import { ExperienceState } from '../context/WorkspaceContext';
-import { soundEngine } from '../audio/soundEngine';
+import { ExperienceState, RoomDevicesState } from '../context/WorkspaceContext';
 import {
   afterSoftwareDraw,
   createContactShadowTexture,
   detectSoftwareWebGL,
   disposeObject3D,
 } from './webglUtils';
+import {
+  createDeskMatTexture,
+  createFabricWeaveTextures,
+  createMonitorDesktopTexture,
+  createNightSkyTexture,
+  createSideMonitorTexture,
+  createWallSwitchPlateTexture,
+  createWalnutGrainTextures,
+  createWoodFloorTexture,
+  createWovenRugTexture,
+} from './room/roomTextures';
+import { buildInteractiveBed } from './room/InteractiveBedBuilder';
+import { buildPhoneStation } from './room/PhoneStationBuilder';
+import { buildGamingSetup } from './room/GamingSetupBuilder';
+import {
+  LightingMode,
+  RoomInteractivePart,
+  RoomSceneController,
+  RoomSceneOptions,
+} from './room/roomTypes';
 
-export type RoomInteractivePart =
-  | 'chair'
-  | 'desk'
-  | 'power'
-  | 'monitor'
-  | 'headphones'
-  | 'keyboard'
-  | 'ac'
-  | 'fan'
-  | 'wallart'
-  | 'light_ceiling'
-  | 'light_desk'
-  | 'light_rgb'
-  | 'light_bed'
-  | 'switch_ceiling'
-  | 'switch_desk'
-  | 'switch_rgb'
-  | 'switch_bed'
-  | 'switch_fan'
-  | 'switch_ac';
-
-export type LightingMode = 'study' | 'coding' | 'relax' | 'cinematic';
-
-export interface RoomDevicesState {
-  ceilingLight: boolean;
-  deskLight: boolean;
-  rgbLight: boolean;
-  bedLight: boolean;
-  fan: boolean;
-  ac: boolean;
-}
-
-export interface RoomSceneController {
-  setExperienceState: (state: ExperienceState) => void;
-  animateCameraToDesk: (onComplete?: () => void) => void;
-  animateCameraToWallSwitch: (onComplete?: () => void) => void;
-  animateCameraToOverview: (onComplete?: () => void) => void;
-  setMoveInput: (dx: number, dz: number) => void;
-  setAccentColor: (hex: string) => void;
-  setLightingMode: (mode: LightingMode) => void;
-  setDevicesState: (devices: RoomDevicesState) => void;
-  setFanEnabled: (enabled: boolean) => void;
-  setAcEnabled: (enabled: boolean) => void;
-  setReducedMotion: (reduced: boolean) => void;
-  dispose: () => void;
-}
-
-export interface RoomSceneOptions {
-  container: HTMLElement;
-  initialState: ExperienceState;
-  accentHex?: string;
-  onPartClick?: (part: RoomInteractivePart) => void;
-  onPartHover?: (part: RoomInteractivePart | null) => void;
-  onContextLost?: () => void;
-}
+export type {
+  LightingMode,
+  RoomInteractivePart,
+  RoomSceneController,
+  RoomSceneOptions,
+  RoomDevicesState,
+};
 
 // Reusable math temporaries (zero per-frame GC)
 const _rayMouse = new THREE.Vector2();
@@ -76,459 +47,14 @@ const _right = new THREE.Vector3();
 const _upAxis = new THREE.Vector3(0, 1, 0);
 const _lookHelper = new THREE.Object3D();
 
-function createWoodFloorTexture(): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
-  const size = 512;
-  const colorCanvas = document.createElement('canvas');
-  colorCanvas.width = size;
-  colorCanvas.height = size;
-  const cCtx = colorCanvas.getContext('2d');
-
-  const bumpCanvas = document.createElement('canvas');
-  bumpCanvas.width = size;
-  bumpCanvas.height = size;
-  const bCtx = bumpCanvas.getContext('2d');
-
-  if (cCtx && bCtx) {
-    cCtx.fillStyle = '#1c1615';
-    cCtx.fillRect(0, 0, size, size);
-    bCtx.fillStyle = '#808080';
-    bCtx.fillRect(0, 0, size, size);
-
-    const planks = 8;
-    const plankH = size / planks;
-    for (let i = 0; i < planks; i++) {
-      const r = 30 + ((i * 11) % 10);
-      const g = 24 + ((i * 7) % 8);
-      const b = 22 + ((i * 5) % 6);
-      cCtx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-      cCtx.fillRect(0, i * plankH, size, plankH - 2);
-
-      const bumpBase = 135 + ((i * 19) % 25);
-      bCtx.fillStyle = `rgb(${bumpBase},${bumpBase},${bumpBase})`;
-      bCtx.fillRect(0, i * plankH, size, plankH - 2);
-
-      for (let s = 0; s < 10; s++) {
-        const yOff = i * plankH + 4 + s * ((plankH - 8) / 10);
-        cCtx.strokeStyle = s % 2 === 0 ? 'rgba(255,245,235,0.03)' : 'rgba(0,0,0,0.16)';
-        cCtx.lineWidth = 1;
-        cCtx.beginPath();
-        cCtx.moveTo(0, yOff);
-        cCtx.bezierCurveTo(size * 0.3, yOff + 1.5, size * 0.7, yOff - 1.5, size, yOff);
-        cCtx.stroke();
-
-        bCtx.strokeStyle = 'rgba(255,255,255,0.08)';
-        bCtx.beginPath();
-        bCtx.moveTo(0, yOff);
-        bCtx.lineTo(size, yOff);
-        bCtx.stroke();
-      }
-
-      cCtx.fillStyle = '#0b0909';
-      cCtx.fillRect(0, (i + 1) * plankH - 2, size, 2);
-      bCtx.fillStyle = '#202020';
-      bCtx.fillRect(0, (i + 1) * plankH - 2, size, 2);
-
-      const stagger = ((i % 2) * size) / 2 + 78;
-      cCtx.fillRect(stagger % size, i * plankH, 2, plankH);
-      bCtx.fillRect(stagger % size, i * plankH, 2, plankH);
-    }
-  }
-
-  const map = new THREE.CanvasTexture(colorCanvas);
-  map.colorSpace = THREE.SRGBColorSpace;
-  map.wrapS = THREE.RepeatWrapping;
-  map.wrapT = THREE.RepeatWrapping;
-  map.repeat.set(4, 4);
-
-  const bumpMap = new THREE.CanvasTexture(bumpCanvas);
-  bumpMap.wrapS = THREE.RepeatWrapping;
-  bumpMap.wrapT = THREE.RepeatWrapping;
-  bumpMap.repeat.set(4, 4);
-
-  return { map, bumpMap };
-}
-
-function createPlasterWallTexture(): THREE.CanvasTexture {
-  const size = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    ctx.fillStyle = '#1b1d26';
-    ctx.fillRect(0, 0, size, size);
-    for (let i = 0; i < 1600; i++) {
-      const x = (i * 73) % size;
-      const y = (i * 139) % size;
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.018)' : 'rgba(0,0,0,0.08)';
-      ctx.fillRect(x, y, 2, 2);
-    }
-  }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(3, 2);
-  return tex;
-}
-
-function createWalnutGrainTextures(): {
-  map: THREE.CanvasTexture;
-  bumpMap: THREE.CanvasTexture;
-  roughnessMap: THREE.CanvasTexture;
-} {
-  const size = 512;
-  const cCanvas = document.createElement('canvas');
-  cCanvas.width = size;
-  cCanvas.height = size;
-  const cCtx = cCanvas.getContext('2d');
-
-  const bCanvas = document.createElement('canvas');
-  bCanvas.width = size;
-  bCanvas.height = size;
-  const bCtx = bCanvas.getContext('2d');
-
-  const rCanvas = document.createElement('canvas');
-  rCanvas.width = size;
-  rCanvas.height = size;
-  const rCtx = rCanvas.getContext('2d');
-
-  if (cCtx && bCtx && rCtx) {
-    cCtx.fillStyle = '#2c201b';
-    cCtx.fillRect(0, 0, size, size);
-    bCtx.fillStyle = '#808080';
-    bCtx.fillRect(0, 0, size, size);
-    rCtx.fillStyle = '#909090';
-    rCtx.fillRect(0, 0, size, size);
-
-    for (let y = 0; y < size; y += 2) {
-      const wave = Math.sin(y * 0.045) * 14 + Math.cos(y * 0.017) * 9;
-      const shade = ((y * 37) % 18) - 9;
-      cCtx.strokeStyle = `rgb(${44 + shade}, ${31 + Math.round(shade * 0.7)}, ${25 + Math.round(shade * 0.5)})`;
-      cCtx.lineWidth = 2;
-      cCtx.beginPath();
-      cCtx.moveTo(0, y);
-      cCtx.bezierCurveTo(size * 0.33, y + wave * 0.4, size * 0.66, y - wave * 0.4, size, y);
-      cCtx.stroke();
-
-      const bVal = 128 + shade * 2;
-      bCtx.strokeStyle = `rgb(${bVal},${bVal},${bVal})`;
-      bCtx.beginPath();
-      bCtx.moveTo(0, y);
-      bCtx.lineTo(size, y);
-      bCtx.stroke();
-
-      const rVal = 120 + ((y * 19) % 45);
-      rCtx.strokeStyle = `rgb(${rVal},${rVal},${rVal})`;
-      rCtx.beginPath();
-      rCtx.moveTo(0, y);
-      rCtx.lineTo(size, y);
-      rCtx.stroke();
-    }
-  }
-
-  const map = new THREE.CanvasTexture(cCanvas);
-  map.colorSpace = THREE.SRGBColorSpace;
-  map.wrapS = map.wrapT = THREE.RepeatWrapping;
-
-  const bumpMap = new THREE.CanvasTexture(bCanvas);
-  bumpMap.wrapS = bumpMap.wrapT = THREE.RepeatWrapping;
-
-  const roughnessMap = new THREE.CanvasTexture(rCanvas);
-  roughnessMap.wrapS = roughnessMap.wrapT = THREE.RepeatWrapping;
-
-  return { map, bumpMap, roughnessMap };
-}
-
-function createFabricWeaveTextures(): {
-  bumpMap: THREE.CanvasTexture;
-  roughnessMap: THREE.CanvasTexture;
-} {
-  const size = 256;
-  const bCanvas = document.createElement('canvas');
-  bCanvas.width = size;
-  bCanvas.height = size;
-  const bCtx = bCanvas.getContext('2d');
-
-  const rCanvas = document.createElement('canvas');
-  rCanvas.width = size;
-  rCanvas.height = size;
-  const rCtx = rCanvas.getContext('2d');
-
-  if (bCtx && rCtx) {
-    bCtx.fillStyle = '#787878';
-    bCtx.fillRect(0, 0, size, size);
-    rCtx.fillStyle = '#c8c8c8';
-    rCtx.fillRect(0, 0, size, size);
-
-    for (let y = 0; y < size; y += 4) {
-      bCtx.fillStyle = y % 8 === 0 ? '#a0a0a0' : '#585858';
-      bCtx.fillRect(0, y, size, 2);
-      rCtx.fillStyle = y % 8 === 0 ? '#dcdcdc' : '#b2b2b2';
-      rCtx.fillRect(0, y, size, 2);
-    }
-    for (let x = 0; x < size; x += 4) {
-      bCtx.fillStyle = x % 8 === 0 ? 'rgba(220,220,220,0.28)' : 'rgba(40,40,40,0.28)';
-      bCtx.fillRect(x, 0, 2, size);
-    }
-  }
-
-  const bumpMap = new THREE.CanvasTexture(bCanvas);
-  bumpMap.wrapS = bumpMap.wrapT = THREE.RepeatWrapping;
-  bumpMap.repeat.set(6, 6);
-
-  const roughnessMap = new THREE.CanvasTexture(rCanvas);
-  roughnessMap.wrapS = roughnessMap.wrapT = THREE.RepeatWrapping;
-  roughnessMap.repeat.set(6, 6);
-
-  return { bumpMap, roughnessMap };
-}
-
-function createDeskMatTexture(accentHex: string): THREE.CanvasTexture {
-  const w = 512;
-  const h = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    ctx.fillStyle = '#0e1119';
-    ctx.fillRect(0, 0, w, h);
-    for (let y = 0; y < h; y += 3) {
-      ctx.fillStyle = y % 6 === 0 ? 'rgba(255,255,255,0.015)' : 'rgba(0,0,0,0.12)';
-      ctx.fillRect(0, y, w, 1);
-    }
-    ctx.strokeStyle = accentHex;
-    ctx.globalAlpha = 0.45;
-    ctx.lineWidth = 3;
-    ctx.setLineDash([8, 5]);
-    ctx.strokeRect(8, 8, w - 16, h - 16);
-    ctx.globalAlpha = 1;
-  }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-function createWovenRugTexture(): THREE.CanvasTexture {
-  const size = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    ctx.fillStyle = '#161822';
-    ctx.fillRect(0, 0, size, size);
-    for (let y = 0; y < size; y += 4) {
-      ctx.fillStyle = y % 8 === 0 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.18)';
-      ctx.fillRect(0, y, size, 2);
-    }
-    ctx.strokeStyle = 'rgba(139,92,246,0.28)';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(8, 8, size - 16, size - 16);
-  }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-function createNightSkyTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    const grad = ctx.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0, '#070b18');
-    grad.addColorStop(0.65, '#132245');
-    grad.addColorStop(1, '#1e1b4b');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 256, 256);
-
-    const moon = ctx.createRadialGradient(185, 68, 4, 185, 68, 46);
-    moon.addColorStop(0, 'rgba(226, 232, 240, 0.95)');
-    moon.addColorStop(0.22, 'rgba(147, 197, 253, 0.35)');
-    moon.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = moon;
-    ctx.fillRect(120, 12, 120, 120);
-
-    ctx.fillStyle = '#070a14';
-    const heights = [36, 54, 42, 72, 48, 66, 38, 58, 44, 62];
-    heights.forEach((h, idx) => {
-      ctx.fillRect(idx * 26, 256 - h, 24, h);
-    });
-  }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-function createMonitorDesktopTexture(accentHex: string): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1024;
-  canvas.height = 576;
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    const bg = ctx.createLinearGradient(0, 0, 1024, 576);
-    bg.addColorStop(0, '#090b16');
-    bg.addColorStop(0.45, '#161333');
-    bg.addColorStop(1, '#081221');
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, 1024, 576);
-
-    const rad = ctx.createRadialGradient(540, 270, 24, 540, 270, 400);
-    rad.addColorStop(0, `${accentHex}44`);
-    rad.addColorStop(0.55, '#38BDF822');
-    rad.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = rad;
-    ctx.fillRect(0, 0, 1024, 576);
-
-    ctx.fillStyle = 'rgba(15, 17, 26, 0.8)';
-    ctx.fillRect(0, 0, 1024, 30);
-    ctx.fillStyle = '#F8FAFC';
-    ctx.font = '600 13px sans-serif';
-    ctx.fillText('JashedOS   File   Edit   View   Window', 20, 20);
-
-    ctx.fillStyle = 'rgba(18, 20, 30, 0.88)';
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(190, 92, 644, 348, 18);
-    ctx.fill();
-    ctx.stroke();
-
-    ['#FF5F57', '#FEBC2E', '#28C840'].forEach((col, i) => {
-      ctx.fillStyle = col;
-      ctx.beginPath();
-      ctx.arc(218 + i * 20, 114, 6, 0, Math.PI * 2);
-      ctx.fill();
-    });
-
-    ctx.fillStyle = '#F8FAFC';
-    ctx.font = '700 44px sans-serif';
-    ctx.fillText('Jashed', 238, 214);
-    ctx.fillStyle = accentHex;
-    ctx.fillText('.dev', 392, 214);
-
-    ctx.fillStyle = '#CBD5E1';
-    ctx.font = '400 18px sans-serif';
-    ctx.fillText('macOS / iOS Inspired Developer Workspace', 238, 252);
-    ctx.fillStyle = '#94A3B8';
-    ctx.fillText('Power on PC to explore Projects, Terminal & 3D Journey', 238, 282);
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.beginPath();
-    ctx.roundRect(312, 508, 400, 50, 18);
-    ctx.fill();
-    ctx.stroke();
-  }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-function createSideMonitorTexture(accentHex: string): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 896;
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    ctx.fillStyle = '#090B12';
-    ctx.fillRect(0, 0, 512, 896);
-    ctx.fillStyle = '#141724';
-    ctx.fillRect(0, 0, 512, 46);
-    ['#FF5F57', '#FEBC2E', '#28C840'].forEach((col, i) => {
-      ctx.fillStyle = col;
-      ctx.beginPath();
-      ctx.arc(24 + i * 18, 23, 5, 0, Math.PI * 2);
-      ctx.fill();
-    });
-    ctx.fillStyle = '#94A3B8';
-    ctx.font = '500 15px monospace';
-    ctx.fillText('room_blueprint.ts', 90, 28);
-
-    const lines = [
-      'const studio = {',
-      '  size: "12 x 10 x 9 ft",',
-      '  area: "120 sq ft",',
-      '  theme: "Dark Charcoal + Purple",',
-      '  cooling: ["1-Ton Inverter AC", "48in BLDC Fan"],',
-      '  lighting: ["4000K Ceiling", "3000K Bed", "RGB"],',
-      '  workstation: {',
-      '    desk: "West Wall (5x2 ft)",',
-      '    displays: "Dual Monitor + UPS",',
-      '  },',
-      '};',
-      '',
-      '// Press PC Power Button to boot JashedOS',
-      'jashed@workspace:~$ _',
-    ];
-    lines.forEach((line, i) => {
-      const y = 96 + i * 36;
-      ctx.fillStyle = '#475569';
-      ctx.font = '400 14px monospace';
-      ctx.fillText(String(i + 1).padStart(2, '0'), 18, y);
-      ctx.fillStyle = line.includes('"')
-        ? '#A5F3FC'
-        : line.includes('//')
-          ? '#64748B'
-          : line.includes('const')
-            ? accentHex
-            : '#E2E8F0';
-      ctx.fillText(line, 56, y);
-    });
-  }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-function createWallSwitchPlateTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 320;
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    const grad = ctx.createLinearGradient(0, 0, 512, 320);
-    grad.addColorStop(0, '#181c28');
-    grad.addColorStop(1, '#10131c');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 512, 320);
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(8, 8, 496, 304);
-
-    ctx.fillStyle = 'rgba(226, 232, 240, 0.72)';
-    ctx.font = '600 15px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('STUDIO SMART SWITCHBOARD', 256, 36);
-
-    const labels = ['CEILING', 'DESK', 'RGB', 'LAMP', 'FAN', 'AC'];
-    const cols = 3;
-    labels.forEach((lbl, idx) => {
-      const col = idx % cols;
-      const row = Math.floor(idx / cols);
-      const cx = 104 + col * 152;
-      const cy = row === 0 ? 150 : 284;
-      ctx.fillStyle = 'rgba(241, 245, 249, 0.85)';
-      ctx.font = '700 16px sans-serif';
-      ctx.fillText(lbl, cx, cy);
-    });
-  }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
 export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   const {
     container,
     initialState,
-    accentHex = '#8B5CF6',
+    accentHex = '#38BDF8',
     onPartClick,
     onPartHover,
+    onRacingTelemetry,
     onContextLost,
   } = options;
 
@@ -539,8 +65,8 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   const height = Math.max(container.clientHeight, 300);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x06070c);
-  scene.fog = new THREE.FogExp2(0x06070c, 0.025);
+  scene.background = new THREE.Color(0x090b0f);
+  scene.fog = new THREE.FogExp2(0x090b0f, 0.018);
 
   const camera = new THREE.PerspectiveCamera(isNarrow ? 64 : 50, width / height, 0.1, 60);
   camera.rotation.order = 'YXZ';
@@ -555,7 +81,7 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   );
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.12;
+  renderer.toneMappingExposure = 1.1;
   renderer.shadowMap.enabled = !isSoftwareGl;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.domElement.style.display = 'block';
@@ -572,70 +98,70 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   pmrem.dispose();
 
   // ==========================================
-  // 12 x 10 x 9 ft ROOM COORDINATES (1 ft = 0.45 units)
-  // East-West (X): [-2.25, +2.25] (10 ft = 4.50 units)
-  // North-South (Z): [-2.70, +2.70] (12 ft = 5.40 units)
-  // Floor-Ceiling (Y): [0, 4.05] (9 ft = 4.05 units)
+  // EXPANDED SPACIOUS BEDROOM DIMENSIONS
+  // East-West (X): [-2.65, +2.65] (5.30 units)
+  // North-South (Z): [-3.05, +3.05] (6.10 units)
+  // Floor-Ceiling (Y): [0, 4.15]
   // ==========================================
-  const roomHalfW = 2.25;
-  const roomHalfL = 2.7;
-  const roomHeight = 4.05;
+  const roomHalfW = 2.65;
+  const roomHalfL = 3.05;
+  const roomHeight = 4.15;
 
   // ==========================================
-  // 4-MODE LIGHTING RIG (Ceiling 4000K + Desk Task + Bed 2700K + PC/Wall Bias)
+  // DYNAMIC PBR LIGHTING RIG (Global Master Toggle + Individual Circuits)
   // ==========================================
   const accentColor = new THREE.Color(accentHex);
 
-  const hemiLight = new THREE.HemisphereLight(0xdbeafe, 0x151110, 0.46);
+  const hemiLight = new THREE.HemisphereLight(0xf8f9fa, 0x262930, 0.56);
   scene.add(hemiLight);
 
-  // 4000K Neutral White Architectural Ceiling Bounce
-  const ceilingLightRig = new THREE.PointLight(0xfff4e2, 2.0, 12, 1.35);
-  ceilingLightRig.position.set(0, 3.65, 0);
+  // 4000K Neutral Architectural Ceiling Light
+  const ceilingLightRig = new THREE.PointLight(0xfff7ed, 2.2, 14, 1.35);
+  ceilingLightRig.position.set(0, 3.72, 0);
   ceilingLightRig.castShadow = !isSoftwareGl;
   ceilingLightRig.shadow.mapSize.set(1024, 1024);
   ceilingLightRig.shadow.bias = -0.0004;
   ceilingLightRig.shadow.normalBias = 0.02;
   scene.add(ceilingLightRig);
 
-  // Purple/Accent Bias Glow behind Workstation & TV Wall
-  const purpleAmbientWest = new THREE.PointLight(accentColor, 2.1, 7.0, 1.5);
-  purpleAmbientWest.position.set(-1.72, 1.48, 0.65);
-  scene.add(purpleAmbientWest);
+  // Crisp #f8f9fa LED Wash along West Acoustic Wall & East X-Cross Panel
+  const wallLedWashWest = new THREE.PointLight(0xf8f9fa, 1.45, 7.5, 1.5);
+  wallLedWashWest.position.set(-1.95, 1.65, 0.42);
+  scene.add(wallLedWashWest);
 
-  const purpleAmbientEast = new THREE.PointLight(accentColor, 1.6, 6.2, 1.5);
-  purpleAmbientEast.position.set(1.65, 1.85, -1.05);
-  scene.add(purpleAmbientEast);
+  const wallLedWashEast = new THREE.PointLight(0xf8f9fa, 1.55, 7.2, 1.5);
+  wallLedWashEast.position.set(1.95, 2.35, -0.58);
+  scene.add(wallLedWashEast);
 
-  // Focused 4200K Monitor Lightbar Task SpotLight (casts realistic keyboard/desk shadows)
-  const deskTaskLight = new THREE.SpotLight(0xfff6e6, 3.4, 4.8, Math.PI / 2.8, 0.72, 1.35);
-  deskTaskLight.position.set(-1.62, 1.58, 0.66);
-  deskTaskLight.target.position.set(-1.42, 0.78, 0.66);
+  // Focused 4200K Monitor Lightbar Task SpotLight (crisp desk/keyboard shadows)
+  const deskTaskLight = new THREE.SpotLight(0xfff8ec, 3.2, 5.0, Math.PI / 2.7, 0.72, 1.35);
+  deskTaskLight.position.set(-1.95, 1.6, 0.42);
+  deskTaskLight.target.position.set(-1.75, 0.78, 0.42);
   deskTaskLight.castShadow = !isSoftwareGl;
   deskTaskLight.shadow.mapSize.set(1024, 1024);
   deskTaskLight.shadow.bias = -0.0004;
   deskTaskLight.shadow.normalBias = 0.015;
   scene.add(deskTaskLight, deskTaskLight.target);
 
-  // PC Tower Interior Tempered-Glass RGB Glow
-  const pcInternalLight = new THREE.PointLight(accentColor, 1.45, 2.6, 1.6);
-  pcInternalLight.position.set(-1.62, 1.12, -0.22);
+  // PC Interior Showcase Lighting
+  const pcInternalLight = new THREE.PointLight(accentColor, 1.25, 2.6, 1.6);
+  pcInternalLight.position.set(-1.95, 1.12, -0.46);
   scene.add(pcInternalLight);
 
-  // 2700K Warm Bedside Lamp Light (North-West corner near bed)
-  const bedsideWarmLight = new THREE.PointLight(0xffb347, 2.0, 4.8, 1.55);
-  bedsideWarmLight.position.set(-1.42, 0.92, -2.28);
+  // 2700K Warm Bedside Lamp
+  const bedsideWarmLight = new THREE.PointLight(0xffb347, 1.9, 5.2, 1.55);
+  bedsideWarmLight.position.set(-1.44, 0.94, -2.72);
   scene.add(bedsideWarmLight);
 
-  // Cool Nighttime Moonlight Rim through West Window Blinds
-  const windowMoonLight = new THREE.SpotLight(0x60a5fa, 1.85, 8.2, Math.PI / 3.1, 0.7, 1.4);
-  windowMoonLight.position.set(-2.15, 2.25, 0.68);
-  windowMoonLight.target.position.set(0.35, 0.45, 0.68);
+  // Moonlight Rim through West Window Blinds (stays subtle even when room lights are OFF)
+  const windowMoonLight = new THREE.SpotLight(0x7dd3fc, 1.2, 8.8, Math.PI / 3.0, 0.75, 1.4);
+  windowMoonLight.position.set(-2.55, 2.38, 0.42);
+  windowMoonLight.target.position.set(0.35, 0.45, 0.42);
   scene.add(windowMoonLight, windowMoonLight.target);
 
   // Dual Monitor Screen Emission Bounce
-  const deskMonitorGlow = new THREE.PointLight(0x38bdf8, 0.3, 3.6, 1.7);
-  deskMonitorGlow.position.set(-1.42, 1.28, 0.66);
+  const deskMonitorGlow = new THREE.PointLight(0x38bdf8, 0.32, 3.8, 1.7);
+  deskMonitorGlow.position.set(-1.76, 1.28, 0.42);
   scene.add(deskMonitorGlow);
 
   let ceilingArea: THREE.RectAreaLight | null = null;
@@ -643,51 +169,45 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
 
   if (!isSoftwareGl) {
     RectAreaLightUniformsLib.init();
-    ceilingArea = new THREE.RectAreaLight(0xfff7ed, 0.95, 2.4, 2.4);
-    ceilingArea.position.set(0, 3.92, 0);
+    ceilingArea = new THREE.RectAreaLight(0xf8f9fa, 0.95, 2.6, 2.6);
+    ceilingArea.position.set(0, 4.0, 0);
     ceilingArea.lookAt(0, 0, 0);
     scene.add(ceilingArea);
 
-    // Subtle Dual-Monitor Wall Bias Wash
-    deskBiasArea = new THREE.RectAreaLight(accentColor, 1.35, 0.25, 1.9);
-    deskBiasArea.position.set(-2.16, 1.18, 0.68);
-    deskBiasArea.lookAt(-1.4, 1.18, 0.68);
+    deskBiasArea = new THREE.RectAreaLight(0xf8f9fa, 1.25, 0.28, 2.1);
+    deskBiasArea.position.set(-2.54, 1.5, 0.36);
+    deskBiasArea.lookAt(-1.6, 1.3, 0.36);
     scene.add(deskBiasArea);
   }
 
   // ==========================================
-  // SHARED PBR MATERIALS (Procedural Wood Grain, Fabric Weave & Clearcoat)
+  // SHARED PBR MATERIALS (Uniform Matte #6e7378 Cool Gray Walls, #6b442e Floor)
   // ==========================================
-  const plasterTex = createPlasterWallTexture();
   const { map: walnutMap, bumpMap: walnutBump, roughnessMap: walnutRough } =
     createWalnutGrainTextures();
   walnutMap.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const { bumpMap: fabricBump, roughnessMap: fabricRough } = createFabricWeaveTextures();
 
-  const charcoalAccentWallMat = new THREE.MeshStandardMaterial({
-    map: plasterTex,
-    color: 0x1a1c26,
-    roughness: 0.9,
-    metalness: 0.03,
+  // Perfectly matte, solid, featureless Cool Gray (#6e7378) applied uniformly to ALL walls
+  const coolGrayWallMat = new THREE.MeshStandardMaterial({
+    color: 0x6e7378,
+    roughness: 0.94,
+    metalness: 0.0,
   });
-  const lightGreyWallMat = new THREE.MeshStandardMaterial({
-    map: plasterTex,
-    color: 0x242734,
-    roughness: 0.88,
-    metalness: 0.03,
-  });
+
   const ceilingWhiteMat = new THREE.MeshStandardMaterial({
-    color: 0xd4d7e0,
+    color: 0xd8dce2,
     roughness: 0.92,
     metalness: 0.02,
   });
 
+  // #6b442e Warm Wood Plank Floor
   const { map: woodMap, bumpMap: woodBump } = createWoodFloorTexture();
   woodMap.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const woodFloorMat = new THREE.MeshStandardMaterial({
     map: woodMap,
     bumpMap: woodBump,
-    bumpScale: 0.014,
+    bumpScale: 0.015,
     roughness: 0.48,
     metalness: 0.08,
   });
@@ -700,41 +220,47 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
     roughness: 0.56,
     metalness: 0.06,
   });
+
   const darkDeskWoodMat = new THREE.MeshStandardMaterial({
     map: walnutMap,
     bumpMap: walnutBump,
     bumpScale: 0.006,
     roughnessMap: walnutRough,
-    color: 0x9e8c84,
+    color: 0x383b40,
     roughness: 0.44,
     metalness: 0.1,
   });
+
   const matteBlackMat = new THREE.MeshStandardMaterial({
-    color: 0x0e1118,
-    roughness: 0.58,
+    color: 0x161920,
+    roughness: 0.54,
     metalness: 0.34,
   });
+
   const brushedAlumMat = new THREE.MeshPhysicalMaterial({
-    color: 0xbac4d2,
+    color: 0xc2cbd6,
     metalness: 0.92,
     roughness: 0.22,
     clearcoat: 0.45,
   });
-  const rgbEmissiveMat = new THREE.MeshStandardMaterial({
-    color: accentColor,
-    emissive: accentColor,
-    emissiveIntensity: 1.5,
+
+  const ledPanelMat = new THREE.MeshStandardMaterial({
+    color: 0xf8f9fa,
+    emissive: 0xf8f9fa,
+    emissiveIntensity: 1.45,
     roughness: 0.2,
-    metalness: 0.2,
+    metalness: 0.1,
   });
+
   const ceilingFixtureMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    emissive: 0xfff3d6,
-    emissiveIntensity: 1.5,
+    color: 0xf8f9fa,
+    emissive: 0xf8f9fa,
+    emissiveIntensity: 1.45,
     roughness: 0.2,
   });
+
   const leatherChairMat = new THREE.MeshPhysicalMaterial({
-    color: 0x161922,
+    color: 0x1e222a,
     bumpMap: fabricBump,
     bumpScale: 0.005,
     roughness: 0.48,
@@ -742,22 +268,9 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
     clearcoat: 0.12,
     clearcoatRoughness: 0.65,
   });
-  const fabricBedMat = new THREE.MeshStandardMaterial({
-    color: 0x222536,
-    bumpMap: fabricBump,
-    bumpScale: 0.009,
-    roughnessMap: fabricRough,
-    roughness: 0.92,
-  });
-  const blanketMat = new THREE.MeshStandardMaterial({
-    color: 0x31264f,
-    bumpMap: fabricBump,
-    bumpScale: 0.011,
-    roughnessMap: fabricRough,
-    roughness: 0.9,
-  });
+
   const foliageMat = new THREE.MeshStandardMaterial({
-    color: 0x1f623b,
+    color: 0x22663f,
     roughness: 0.46,
     metalness: 0.04,
   });
@@ -784,72 +297,90 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   };
 
   // ==========================================
-  // 1. ARCHITECTURAL 12 x 10 x 9 ft ROOM ENCLOSURE
+  // 1. ARCHITECTURAL ROOM SHELL & FLOOR
   // ==========================================
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(roomHalfW * 2, roomHalfL * 2), woodFloorMat);
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(roomHalfW * 2, roomHalfL * 2),
+    woodFloorMat
+  );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   scene.add(floor);
 
   const exteriorFloor = new THREE.Mesh(
-    new THREE.PlaneGeometry(34, 34),
-    new THREE.MeshStandardMaterial({ color: 0x05060a, roughness: 0.94 })
+    new THREE.PlaneGeometry(36, 36),
+    new THREE.MeshStandardMaterial({ color: 0x07090d, roughness: 0.94 })
   );
   exteriorFloor.rotation.x = -Math.PI / 2;
   exteriorFloor.position.y = -0.02;
   scene.add(exteriorFloor);
 
-  // North Wall (Z = -2.70) — Charcoal accent wall for Bed Headboard
-  const northWall = new THREE.Mesh(new THREE.BoxGeometry(4.66, roomHeight, 0.16), charcoalAccentWallMat);
+  // North Wall (Z = -3.05) — Uniform Matte Cool Gray
+  const northWall = new THREE.Mesh(
+    new THREE.BoxGeometry(roomHalfW * 2 + 0.16, roomHeight, 0.16),
+    coolGrayWallMat
+  );
   northWall.position.set(0, roomHeight / 2, -roomHalfL - 0.08);
   northWall.receiveShadow = true;
   scene.add(northWall);
 
-  // West Wall (X = -2.25) — Workstation & Window Wall
-  const westWall = new THREE.Mesh(new THREE.BoxGeometry(0.16, roomHeight, 5.56), lightGreyWallMat);
+  // West Wall (X = -2.65) — Uniform Matte Cool Gray
+  const westWall = new THREE.Mesh(
+    new THREE.BoxGeometry(0.16, roomHeight, roomHalfL * 2 + 0.16),
+    coolGrayWallMat
+  );
   westWall.position.set(-roomHalfW - 0.08, roomHeight / 2, 0);
   westWall.receiveShadow = true;
   scene.add(westWall);
 
-  // East Wall (X = +2.25) — Television Wall
-  const eastWall = new THREE.Mesh(new THREE.BoxGeometry(0.16, roomHeight, 5.56), lightGreyWallMat);
+  // East Wall (X = +2.65) — Uniform Matte Cool Gray
+  const eastWall = new THREE.Mesh(
+    new THREE.BoxGeometry(0.16, roomHeight, roomHalfL * 2 + 0.16),
+    coolGrayWallMat
+  );
   eastWall.position.set(roomHalfW + 0.08, roomHeight / 2, 0);
   eastWall.receiveShadow = true;
   scene.add(eastWall);
 
-  // South Wall (Z = +2.70) — Entrance Door & AC Wall (kept slightly lower opacity or cutaway? No, full wall when inside!)
-  const southWall = new THREE.Mesh(new THREE.BoxGeometry(4.66, roomHeight, 0.16), lightGreyWallMat);
+  // South Wall (Z = +3.05) — Uniform Matte Cool Gray
+  const southWall = new THREE.Mesh(
+    new THREE.BoxGeometry(roomHalfW * 2 + 0.16, roomHeight, 0.16),
+    coolGrayWallMat
+  );
   southWall.position.set(0, roomHeight / 2, roomHalfL + 0.08);
   scene.add(southWall);
 
-  // Simple White Ceiling (Y = 4.05)
-  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 5.5), ceilingWhiteMat);
+  // Ceiling
+  const ceiling = new THREE.Mesh(
+    new THREE.PlaneGeometry(roomHalfW * 2 + 0.1, roomHalfL * 2 + 0.1),
+    ceilingWhiteMat
+  );
   ceiling.rotation.x = Math.PI / 2;
   ceiling.position.set(0, roomHeight, 0);
   scene.add(ceiling);
 
-  // Baseboards
-  const baseboardMat = new THREE.MeshStandardMaterial({ color: 0x0d0f16, roughness: 0.55 });
-  const northBase = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.11, 0.04), baseboardMat);
-  northBase.position.set(0, 0.055, -roomHalfL + 0.02);
-  const westBase = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.11, 5.4), baseboardMat);
-  westBase.position.set(-roomHalfW + 0.02, 0.055, 0);
-  const eastBase = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.11, 5.4), baseboardMat);
-  eastBase.position.set(roomHalfW - 0.02, 0.055, 0);
+  // Architectural #383b40 Baseboards
+  const baseboardMat = new THREE.MeshStandardMaterial({ color: 0x383b40, roughness: 0.6 });
+  const northBase = new THREE.Mesh(new THREE.BoxGeometry(roomHalfW * 2, 0.12, 0.04), baseboardMat);
+  northBase.position.set(0, 0.06, -roomHalfL + 0.02);
+  const westBase = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, roomHalfL * 2), baseboardMat);
+  westBase.position.set(-roomHalfW + 0.02, 0.06, 0);
+  const eastBase = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, roomHalfL * 2), baseboardMat);
+  eastBase.position.set(roomHalfW - 0.02, 0.06, 0);
   scene.add(northBase, westBase, eastBase);
 
-  // 4 × 6 ft Dark Rug (1.80 × 2.70 units) in center floor
+  // Woven Center Rug on Wood Plank Floor
   const rugTex = createWovenRugTexture();
   const centerRug = new THREE.Mesh(
-    new THREE.BoxGeometry(1.75, 0.018, 2.55),
+    new THREE.BoxGeometry(1.95, 0.018, 2.75),
     new THREE.MeshStandardMaterial({ map: rugTex, roughness: 0.95 })
   );
-  centerRug.position.set(0.32, 0.009, 0.55);
+  centerRug.position.set(0.42, 0.009, 0.72);
   centerRug.receiveShadow = true;
   scene.add(centerRug);
 
   // ==========================================
-  // 2. CEILING FAN (48" Matte Black BLDC) + 4x 12W 4000K SURFACE CEILING LIGHTS
+  // 2. CEILING FAN (48" BLDC) + 4x CEILING LIGHTS
   // ==========================================
   const fanGroup = new THREE.Group();
   fanGroup.position.set(0, roomHeight - 0.02, 0.15);
@@ -868,25 +399,23 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   const fanHub = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.15, 0.09, 20), matteBlackMat);
   fanRotor.add(fanHub);
 
-  // 3 sleek 48-inch matte black blades (radius ~0.92 units)
   for (let b = 0; b < 3; b++) {
     const angle = (b / 3) * Math.PI * 2;
     const bladeHolder = new THREE.Group();
     bladeHolder.rotation.y = angle;
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.018, 0.85), matteBlackMat);
-    blade.position.set(0, 0, 0.48);
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.018, 0.88), matteBlackMat);
+    blade.position.set(0, 0, 0.49);
     blade.rotation.z = 0.1;
     bladeHolder.add(blade);
     fanRotor.add(bladeHolder);
   }
-  registerHitbox(fanGroup, [1.8, 0.5, 1.8], [0, -0.3, 0], 'fan');
+  registerHitbox(fanGroup, [1.85, 0.5, 1.85], [0, -0.3, 0], 'fan');
 
-  // 4 Surface-Mounted LED Ceiling Lights (12W, 4000K) — individually clickable
   [
-    [-1.15, -1.3],
-    [1.15, -1.3],
-    [-1.15, 1.45],
-    [1.15, 1.45],
+    [-1.35, -1.45],
+    [1.35, -1.45],
+    [-1.35, 1.65],
+    [1.35, 1.65],
   ].forEach(([lx, lz]) => {
     const fixture = new THREE.Group();
     fixture.position.set(lx, roomHeight - 0.02, lz);
@@ -902,179 +431,116 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   });
 
   // ==========================================
-  // 3. SOUTH WALL: ENTRANCE DOOR + 1-TON INVERTER SPLIT AC + SWITCH PANEL
+  // 3. SOUTH WALL: ENTRANCE DOOR + INVERTER SPLIT AC
   // ==========================================
   const doorGroup = new THREE.Group();
-  doorGroup.position.set(-0.45, 0, roomHalfL - 0.02);
+  doorGroup.position.set(-0.35, 0, roomHalfL - 0.02);
   scene.add(doorGroup);
 
-  const doorPanel = new THREE.Mesh(new THREE.BoxGeometry(1.15, 2.95, 0.06), walnutMat);
-  doorPanel.position.y = 1.475;
+  const doorPanel = new THREE.Mesh(new THREE.BoxGeometry(1.18, 3.0, 0.06), walnutMat);
+  doorPanel.position.y = 1.5;
   doorGroup.add(doorPanel);
 
-  const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(1.25, 3.02, 0.04), matteBlackMat);
-  doorFrame.position.set(0, 1.51, -0.02);
+  const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(1.28, 3.06, 0.04), matteBlackMat);
+  doorFrame.position.set(0, 1.53, -0.02);
   doorGroup.add(doorFrame);
 
   const doorHandle = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.035, 0.07), brushedAlumMat);
-  doorHandle.position.set(0.42, 1.32, -0.05);
+  doorHandle.position.set(0.42, 1.34, -0.05);
   doorGroup.add(doorHandle);
 
-  // 1-Ton Inverter Split AC Unit high on South Wall (away from direct bed/desk draft)
   const acGroup = new THREE.Group();
-  acGroup.position.set(1.05, 3.35, roomHalfL - 0.14);
+  acGroup.position.set(1.32, 3.42, roomHalfL - 0.14);
   scene.add(acGroup);
 
   const acBody = new THREE.Mesh(
-    new THREE.BoxGeometry(1.32, 0.34, 0.24),
-    new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.25, metalness: 0.1 })
+    new THREE.BoxGeometry(1.36, 0.34, 0.24),
+    new THREE.MeshStandardMaterial({ color: 0xf1f3f5, roughness: 0.25, metalness: 0.1 })
   );
   acGroup.add(acBody);
 
-  const acVent = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.04, 0.03), matteBlackMat);
+  const acVent = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.04, 0.03), matteBlackMat);
   acVent.position.set(0, -0.13, -0.11);
   acGroup.add(acVent);
 
   const acLedMat = new THREE.MeshStandardMaterial({
     color: 0x38bdf8,
     emissive: 0x38bdf8,
-    emissiveIntensity: 1.6,
+    emissiveIntensity: 1.5,
   });
   const acDisplay = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.035, 0.015), acLedMat);
   acDisplay.position.set(0.42, 0.02, -0.125);
   acGroup.add(acDisplay);
 
-  registerHitbox(acGroup, [1.4, 0.45, 0.4], [0, 0, 0], 'ac');
+  registerHitbox(acGroup, [1.45, 0.45, 0.4], [0, 0, 0], 'ac');
 
   // ==========================================
-  // 4. NORTH WALL: BED (5 x 6.5 ft), NIGHTSTAND, BEDSIDE LAMP & PURPLE SHELVES
+  // 4. STANDALONE BED + SEPARATE PHONE CHARGING STATION (EAST SIDEBOARD)
   // ==========================================
-  const bedGroup = new THREE.Group();
-  bedGroup.position.set(0.22, 0, -1.25); // 6.5 ft = 2.92 units -> headboard at -2.68
-  scene.add(bedGroup);
-
-  const bedFrame = new THREE.Mesh(new THREE.BoxGeometry(2.22, 0.26, 2.86), walnutMat);
-  bedFrame.position.y = 0.13;
-  bedFrame.castShadow = !isSoftwareGl;
-  bedFrame.receiveShadow = true;
-  bedGroup.add(bedFrame);
-
-  const headboard = new THREE.Mesh(new THREE.BoxGeometry(2.26, 0.95, 0.14), fabricBedMat);
-  headboard.position.set(0, 0.58, -1.36);
-  headboard.castShadow = !isSoftwareGl;
-  bedGroup.add(headboard);
-
-  const mattress = new THREE.Mesh(
-    new THREE.BoxGeometry(2.08, 0.22, 2.68),
-    new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.88 })
-  );
-  mattress.position.y = 0.35;
-  bedGroup.add(mattress);
-
-  const blanket = new THREE.Mesh(new THREE.BoxGeometry(2.12, 0.23, 1.85), blanketMat);
-  blanket.position.set(0, 0.36, 0.42);
-  bedGroup.add(blanket);
-
-  [-0.48, 0.48].forEach((px) => {
-    const pillow = new THREE.Mesh(
-      new THREE.BoxGeometry(0.76, 0.14, 0.46),
-      new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.85 })
-    );
-    pillow.position.set(px, 0.51, -0.96);
-    pillow.rotation.x = 0.18;
-    bedGroup.add(pillow);
+  const bedHandles = buildInteractiveBed({
+    scene,
+    roomHalfL,
+    isSoftwareGl,
+    walnutMat,
+    matteBlackMat,
+    brushedAlumMat,
+    fabricBump,
+    fabricRough,
+    registerHitbox,
   });
 
-  // Floating Purple-Lit Bookshelves on North Wall above Bed
-  [2.15, 2.75].forEach((sy, sIdx) => {
-    const shelf = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.045, 0.28), walnutMat);
-    shelf.position.set(0.22, sy, -roomHalfL + 0.16);
-    scene.add(shelf);
-
-    const shelfLed = new THREE.Mesh(new THREE.BoxGeometry(1.48, 0.015, 0.02), rgbEmissiveMat);
-    shelfLed.position.set(0.22, sy - 0.025, -roomHalfL + 0.05);
-    scene.add(shelfLed);
-
-    const colors = [0x8b5cf6, 0x38bdf8, 0x334155, 0xf59e0b, 0x475569];
-    for (let k = 0; k < 5; k++) {
-      const h = 0.22 + ((k + sIdx) % 3) * 0.04;
-      const book = new THREE.Mesh(
-        new THREE.BoxGeometry(0.06, h, 0.19),
-        new THREE.MeshStandardMaterial({ color: colors[(k + sIdx) % colors.length], roughness: 0.65 })
-      );
-      book.position.set(-0.32 + k * 0.075, sy + 0.022 + h / 2, -roomHalfL + 0.17);
-      scene.add(book);
-    }
+  const phoneHandles = buildPhoneStation({
+    scene,
+    roomHalfW,
+    isSoftwareGl,
+    matteBlackMat,
+    brushedAlumMat,
+    registerHitbox,
   });
 
-  // North-West Nightstand + 3000K Warm Bedside Lamp + 2 Wall Sockets
-  const nightstand = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.54, 0.5), walnutMat);
-  nightstand.position.set(-1.42, 0.27, -2.35);
-  nightstand.castShadow = !isSoftwareGl;
-  scene.add(nightstand);
-
-  const bedsideBase = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.04, 14), matteBlackMat);
-  bedsideBase.position.set(-1.42, 0.56, -2.35);
-  scene.add(bedsideBase);
-
-  const bedsideShadeMat = new THREE.MeshStandardMaterial({
-    color: 0xfef3c7,
-    emissive: 0xf59e0b,
-    emissiveIntensity: 1.0,
-  });
-  const bedsideLampGroup = new THREE.Group();
-  bedsideLampGroup.position.set(-1.42, 0.74, -2.35);
-  const bedsideShade = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.15, 0.18, 16), bedsideShadeMat);
-  bedsideLampGroup.add(bedsideShade);
-  registerHitbox(bedsideLampGroup, [0.34, 0.36, 0.34], [0, -0.04, 0], 'light_bed');
-  scene.add(bedsideLampGroup);
-
   // ==========================================
-  // 5. WEST WALL: WINDOW + 5x2 ft WORKSTATION DESK + DUAL MONITORS + PC TOWER + UPS + ROUTER
-  // Desk sits against West wall (X = -1.78), facing East (+X)
+  // 5. WEST WALL: WINDOW + WORKSTATION DESK + DUAL MONITORS + PC TOWER + CHAIR
   // ==========================================
-  // Window on West Wall above desk
   const windowGroup = new THREE.Group();
-  windowGroup.position.set(-roomHalfW + 0.02, 2.25, 0.68);
+  windowGroup.position.set(-roomHalfW + 0.02, 2.68, 0.42);
   windowGroup.rotation.y = Math.PI / 2;
   scene.add(windowGroup);
 
-  const winFrame = new THREE.Mesh(new THREE.BoxGeometry(1.96, 1.54, 0.06), matteBlackMat);
+  const winFrame = new THREE.Mesh(new THREE.BoxGeometry(2.05, 1.38, 0.06), matteBlackMat);
   windowGroup.add(winFrame);
 
   const nightSkyTex = createNightSkyTexture();
   const windowGlass = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.78, 1.36),
+    new THREE.PlaneGeometry(1.88, 1.22),
     new THREE.MeshStandardMaterial({
       map: nightSkyTex,
       emissive: 0xffffff,
       emissiveMap: nightSkyTex,
-      emissiveIntensity: 0.6,
+      emissiveIntensity: 0.55,
       roughness: 0.15,
     })
   );
   windowGlass.position.z = 0.036;
   windowGroup.add(windowGlass);
 
-  for (let b = 0; b < 9; b++) {
-    const slat = new THREE.Mesh(new THREE.BoxGeometry(1.74, 0.03, 0.018), matteBlackMat);
-    slat.position.set(0, -0.52 + b * 0.13, 0.055);
+  for (let b = 0; b < 8; b++) {
+    const slat = new THREE.Mesh(new THREE.BoxGeometry(1.82, 0.028, 0.018), matteBlackMat);
+    slat.position.set(0, -0.44 + b * 0.13, 0.055);
     slat.rotation.x = 0.34;
     windowGroup.add(slat);
   }
 
-  // Workstation Group (Centered at X = -1.80, Z = +0.68, rotated -PI/2 around Y so local -Z faces West wall & local +Z faces East into room!)
-  const deskCenterX = -1.8;
-  const deskCenterZ = 0.68;
+  const deskCenterX = -2.14;
+  const deskCenterZ = 0.42;
 
   const contactTex = createContactShadowTexture();
   const deskShadow = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.6, 2.9),
+    new THREE.PlaneGeometry(1.75, 3.1),
     new THREE.MeshBasicMaterial({
       map: contactTex,
       transparent: true,
       depthWrite: false,
-      opacity: 0.6,
+      opacity: 0.58,
     })
   );
   deskShadow.rotation.x = -Math.PI / 2;
@@ -1083,95 +549,81 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
 
   const deskGroup = new THREE.Group();
   deskGroup.position.set(deskCenterX, 0, deskCenterZ);
-  deskGroup.rotation.y = Math.PI / 2; // local -Z points West (-X) wall, local +Z points East (+X) into room
+  deskGroup.rotation.y = Math.PI / 2;
   scene.add(deskGroup);
 
-  // 5 × 2 ft Desk Tabletop (2.30 × 0.90 units, Top at Y = 0.78)
-  const deskTop = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.06, 0.92), darkDeskWoodMat);
+  const deskTop = new THREE.Mesh(new THREE.BoxGeometry(2.48, 0.06, 0.94), darkDeskWoodMat);
   deskTop.position.set(0, 0.75, 0);
   deskTop.castShadow = !isSoftwareGl;
   deskTop.receiveShadow = true;
   deskGroup.add(deskTop);
 
-  // Rear RGB Bias Strip (clickable)
-  const deskLed = new THREE.Mesh(new THREE.BoxGeometry(2.26, 0.022, 0.022), rgbEmissiveMat);
-  deskLed.position.set(0, 0.745, -0.46);
+  // Rear Desk LED Strip (#f8f9fa architectural strip)
+  const deskLed = new THREE.Mesh(new THREE.BoxGeometry(2.38, 0.022, 0.022), ledPanelMat);
+  deskLed.position.set(0, 0.745, -0.47);
   deskGroup.add(deskLed);
-  registerHitbox(deskGroup, [2.26, 0.14, 0.14], [0, 0.75, -0.46], 'light_rgb');
+  registerHitbox(deskGroup, [2.38, 0.14, 0.14], [0, 0.75, -0.47], 'light_rgb');
 
-  // Desk Legs & Left Drawer Pedestal
-  const drawerUnit = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.72, 0.8), matteBlackMat);
-  drawerUnit.position.set(-0.88, 0.36, 0);
+  // Sleek White Drawer Pedestal (matching reference image_e396ab04 & image_fa60901b)
+  const drawerUnitMat = new THREE.MeshStandardMaterial({ color: 0xe2e5ea, roughness: 0.42 });
+  const drawerUnit = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.72, 0.82), drawerUnitMat);
+  drawerUnit.position.set(-0.92, 0.36, 0);
   deskGroup.add(drawerUnit);
 
-  const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.72, 0.8), matteBlackMat);
-  rightLeg.position.set(1.06, 0.36, 0);
+  const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.72, 0.82), matteBlackMat);
+  rightLeg.position.set(1.12, 0.36, 0);
   deskGroup.add(rightLeg);
 
-  // Dedicated UPS & Wi-Fi Router under/at desk corner (per electrical plan)
-  const upsBox = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.32, 0.36), matteBlackMat);
-  upsBox.position.set(0.84, 0.16, -0.18);
-  deskGroup.add(upsBox);
-
-  const routerBox = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.04, 0.15), matteBlackMat);
-  routerBox.position.set(0.84, 0.8, -0.28);
-  deskGroup.add(routerBox);
-
-  // Desk Mat (stitched neoprene pad)
+  // Desk Mat
   const deskMatTex = createDeskMatTexture(accentHex);
   const deskMat = new THREE.Mesh(
-    new THREE.BoxGeometry(1.18, 0.012, 0.46),
-    new THREE.MeshStandardMaterial({ map: deskMatTex, roughness: 0.9, bumpMap: fabricBump, bumpScale: 0.004 })
+    new THREE.BoxGeometry(1.22, 0.012, 0.48),
+    new THREE.MeshStandardMaterial({
+      map: deskMatTex,
+      roughness: 0.9,
+      bumpMap: fabricBump,
+      bumpScale: 0.004,
+    })
   );
   deskMat.position.set(-0.02, 0.786, 0.16);
   deskMat.receiveShadow = true;
   deskGroup.add(deskMat);
 
-  // Broad Desk Hitbox so clicking desk from Entrance triggers GSAP transition
-  registerHitbox(deskGroup, [2.4, 0.9, 1.05], [0, 0.48, 0.04], 'desk');
+  registerHitbox(deskGroup, [2.48, 0.9, 1.05], [0, 0.48, 0.04], 'desk');
 
-  // --- MAIN WIDESCREEN MONITOR + ARTICULATED VESA ARM + LIGHTBAR ---
+  // --- MAIN WIDESCREEN MONITOR + ARTICULATED STAND + LIGHTBAR ---
   const monitorGroup = new THREE.Group();
   monitorGroup.position.set(-0.04, 0.78, -0.22);
   deskGroup.add(monitorGroup);
 
-  const monClamp = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.04, 0.11), brushedAlumMat);
-  monClamp.position.set(0, 0.02, -0.18);
-  monitorGroup.add(monClamp);
-
-  const monStand = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.014, 0.2), brushedAlumMat);
+  const monStand = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.014, 0.2), brushedAlumMat);
   monStand.position.set(0, 0.008, 0.03);
-  monitorGroup.add(monStand);
-
   const monNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.032, 0.36, 14), matteBlackMat);
   monNeck.position.set(0, 0.19, -0.05);
-  monitorGroup.add(monNeck);
-
-  const monBezel = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.62, 0.038), matteBlackMat);
+  const monBezel = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.62, 0.038), matteBlackMat);
   monBezel.position.set(0, 0.42, 0);
   monBezel.castShadow = !isSoftwareGl;
-  monitorGroup.add(monBezel);
+  monitorGroup.add(monStand, monNeck, monBezel);
 
   const desktopTex = createMonitorDesktopTexture(accentHex);
   desktopTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
   const mainScreenMat = new THREE.MeshPhysicalMaterial({
-    color: 0x090b10,
+    color: 0x0b0e14,
     map: desktopTex,
     emissive: 0xffffff,
     emissiveMap: desktopTex,
-    emissiveIntensity: 0.04,
+    emissiveIntensity: 0.06,
     roughness: 0.14,
     metalness: 0.06,
     clearcoat: 0.35,
-    clearcoatRoughness: 0.15,
   });
-  const mainScreen = new THREE.Mesh(new THREE.PlaneGeometry(1.02, 0.56), mainScreenMat);
+  const mainScreen = new THREE.Mesh(new THREE.PlaneGeometry(1.06, 0.56), mainScreenMat);
   mainScreen.position.set(0, 0.42, 0.022);
   monitorGroup.add(mainScreen);
 
   const lightbar = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.015, 0.015, 0.62, 12),
+    new THREE.CylinderGeometry(0.015, 0.015, 0.64, 12),
     brushedAlumMat
   );
   lightbar.rotation.z = Math.PI / 2;
@@ -1179,43 +631,40 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   monitorGroup.add(lightbar);
 
   const lightbarDiffuserMat = new THREE.MeshStandardMaterial({
-    color: 0xfff6e0,
-    emissive: 0xfff3d6,
-    emissiveIntensity: 1.8,
+    color: 0xf8f9fa,
+    emissive: 0xf8f9fa,
+    emissiveIntensity: 1.65,
     roughness: 0.2,
   });
   const lightbarDiffuser = new THREE.Mesh(
-    new THREE.BoxGeometry(0.56, 0.01, 0.016),
+    new THREE.BoxGeometry(0.58, 0.01, 0.016),
     lightbarDiffuserMat
   );
   lightbarDiffuser.position.set(0, 0.732, 0.042);
   monitorGroup.add(lightbarDiffuser);
   registerHitbox(monitorGroup, [0.68, 0.12, 0.14], [0, 0.745, 0.042], 'light_desk');
-
-  registerHitbox(monitorGroup, [1.14, 0.66, 0.2], [0, 0.39, 0.04], 'monitor');
+  registerHitbox(monitorGroup, [1.18, 0.66, 0.2], [0, 0.39, 0.04], 'monitor');
 
   // --- PORTRAIT SIDE MONITOR ---
   const sideMonGroup = new THREE.Group();
-  sideMonGroup.position.set(0.68, 0.78, -0.14);
+  sideMonGroup.position.set(0.7, 0.78, -0.14);
   sideMonGroup.rotation.y = -0.34;
   deskGroup.add(sideMonGroup);
 
   const sideNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.028, 0.36, 12), matteBlackMat);
   sideNeck.position.set(0, 0.18, -0.03);
-  sideMonGroup.add(sideNeck);
-
   const sideBezel = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.62, 0.035), matteBlackMat);
   sideBezel.position.set(0, 0.42, 0);
   sideBezel.castShadow = !isSoftwareGl;
-  sideMonGroup.add(sideBezel);
+  sideMonGroup.add(sideNeck, sideBezel);
 
   const sideTex = createSideMonitorTexture(accentHex);
   const sideScreenMat = new THREE.MeshPhysicalMaterial({
-    color: 0x090b10,
+    color: 0x0b0e14,
     map: sideTex,
     emissive: 0xffffff,
     emissiveMap: sideTex,
-    emissiveIntensity: 0.03,
+    emissiveIntensity: 0.05,
     roughness: 0.16,
     clearcoat: 0.3,
   });
@@ -1223,40 +672,30 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   sideScreen.position.set(0, 0.42, 0.02);
   sideMonGroup.add(sideScreen);
 
-  // --- TEMPERED GLASS PC TOWER WITH VISIBLE GPU & AIO COOLER INTERNALS ---
+  // --- WHITE SHOWCASE PC TOWER (Inspired by reference image_e396ab04.png) ---
   const pcGroup = new THREE.Group();
-  pcGroup.position.set(-0.9, 0.78, -0.06);
+  pcGroup.position.set(-0.92, 0.78, -0.06);
   pcGroup.rotation.y = 0.22;
   deskGroup.add(pcGroup);
 
-  const pcBody = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.64, 0.58), matteBlackMat);
+  const pcWhiteShell = new THREE.MeshStandardMaterial({
+    color: 0xe6e8ec,
+    roughness: 0.32,
+    metalness: 0.1,
+  });
+  const pcBody = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.64, 0.58), pcWhiteShell);
   pcBody.position.set(0, 0.32, 0);
   pcBody.castShadow = !isSoftwareGl;
   pcGroup.add(pcBody);
 
-  // Motherboard, GPU & AIO Pump Block visible on the side panel
-  const moboPlate = new THREE.Mesh(
-    new THREE.BoxGeometry(0.02, 0.46, 0.38),
-    new THREE.MeshStandardMaterial({ color: 0x161b26, roughness: 0.45, metalness: 0.4 })
-  );
-  moboPlate.position.set(0.14, 0.34, -0.02);
-  pcGroup.add(moboPlate);
-
   const gpuShroud = new THREE.Mesh(
     new THREE.BoxGeometry(0.07, 0.055, 0.29),
-    new THREE.MeshStandardMaterial({ color: 0x1f2430, roughness: 0.35, metalness: 0.65 })
+    new THREE.MeshStandardMaterial({ color: 0x262a33, roughness: 0.35, metalness: 0.65 })
   );
   gpuShroud.position.set(0.145, 0.25, 0.02);
-  pcGroup.add(gpuShroud);
-
-  const gpuRgbBar = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.012, 0.22), rgbEmissiveMat);
-  gpuRgbBar.position.set(0.181, 0.258, 0.02);
-  pcGroup.add(gpuRgbBar);
-
-  const aioPumpRing = new THREE.Mesh(new THREE.TorusGeometry(0.042, 0.008, 8, 24), rgbEmissiveMat);
-  aioPumpRing.rotation.y = Math.PI / 2;
-  aioPumpRing.position.set(0.16, 0.41, -0.02);
-  pcGroup.add(aioPumpRing);
+  const gpuLedBar = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.012, 0.22), ledPanelMat);
+  gpuLedBar.position.set(0.181, 0.258, 0.02);
+  pcGroup.add(gpuShroud, gpuLedBar);
 
   const glassSide = new THREE.Mesh(
     new THREE.BoxGeometry(0.014, 0.56, 0.5),
@@ -1265,9 +704,8 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
       metalness: 0.14,
       roughness: 0.04,
       transparent: true,
-      opacity: 0.32,
+      opacity: 0.3,
       clearcoat: 1.0,
-      clearcoatRoughness: 0.05,
     })
   );
   glassSide.position.set(0.186, 0.32, 0);
@@ -1277,7 +715,7 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   for (let f = 0; f < 3; f++) {
     const fan = new THREE.Group();
     fan.position.set(0, 0.14 + f * 0.18, 0.295);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.009, 8, 20), rgbEmissiveMat);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.009, 8, 20), ledPanelMat);
     const b1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.015, 0.006), matteBlackMat);
     const b2 = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.1, 0.006), matteBlackMat);
     fan.add(ring, b1, b2);
@@ -1288,17 +726,19 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   const powerBtnMat = new THREE.MeshStandardMaterial({
     color: 0x38bdf8,
     emissive: 0x38bdf8,
-    emissiveIntensity: 2.3,
+    emissiveIntensity: 2.0,
     roughness: 0.15,
   });
-  const powerBtnRing = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 18), powerBtnMat);
+  const powerBtnRing = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.03, 0.03, 0.02, 18),
+    powerBtnMat
+  );
   powerBtnRing.rotation.x = Math.PI / 2;
   powerBtnRing.position.set(0.1, 0.57, 0.295);
   pcGroup.add(powerBtnRing);
-
   registerHitbox(pcGroup, [0.48, 0.72, 0.68], [0, 0.35, 0.05], 'power');
 
-  // --- MECHANICAL KEYBOARD, COILED AVIATOR CABLE, MOUSE & STUDIO DEVELOPER PROPS ---
+  // --- MECHANICAL KEYBOARD, MOUSE & HEADPHONES ---
   const kbGroup = new THREE.Group();
   kbGroup.position.set(-0.08, 0.795, 0.16);
   kbGroup.rotation.x = 0.08;
@@ -1307,12 +747,8 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   const kbChassis = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.026, 0.21), brushedAlumMat);
   kbChassis.castShadow = !isSoftwareGl;
   kbGroup.add(kbChassis);
-  const kbUnderGlow = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.008, 0.18), rgbEmissiveMat);
-  kbUnderGlow.position.y = 0.015;
-  kbGroup.add(kbUnderGlow);
-
   const keyGeo = new THREE.BoxGeometry(0.03, 0.016, 0.03);
-  const keyMat = new THREE.MeshStandardMaterial({ color: 0x1e2430, roughness: 0.42 });
+  const keyMat = new THREE.MeshStandardMaterial({ color: 0x22262e, roughness: 0.42 });
   const keyInstanced = new THREE.InstancedMesh(keyGeo, keyMat, 56);
   const dummy = new THREE.Object3D();
   for (let r = 0; r < 4; r++) {
@@ -1324,24 +760,6 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   }
   keyInstanced.instanceMatrix.needsUpdate = true;
   kbGroup.add(keyInstanced);
-
-  // Coiled Aviator Cable leading from Keyboard to Back Grommet
-  const cableCoil = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.016, 0.016, 0.18, 14),
-    matteBlackMat
-  );
-  cableCoil.rotation.z = Math.PI / 2;
-  cableCoil.position.set(-0.14, 0.008, -0.15);
-  kbGroup.add(cableCoil);
-
-  const aviatorConnector = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.012, 0.012, 0.045, 12),
-    brushedAlumMat
-  );
-  aviatorConnector.rotation.z = Math.PI / 2;
-  aviatorConnector.position.set(0.02, 0.008, -0.15);
-  kbGroup.add(aviatorConnector);
-
   registerHitbox(kbGroup, [0.64, 0.1, 0.26], [0, 0.02, 0], 'keyboard');
 
   const mouseMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.04, 0.06, 6, 12), matteBlackMat);
@@ -1351,78 +769,9 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   mouseMesh.castShadow = !isSoftwareGl;
   deskGroup.add(mouseMesh);
 
-  // Studio Monitor Bookshelf Speakers (Left & Right angled toward developer)
-  [-0.64, 0.52].forEach((sx, sIdx) => {
-    const spk = new THREE.Group();
-    spk.position.set(sx, 0.78, -0.25);
-    spk.rotation.y = sIdx === 0 ? 0.28 : -0.28;
-    deskGroup.add(spk);
-
-    const spkCab = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.22, 0.15), matteBlackMat);
-    spkCab.position.y = 0.11;
-    spkCab.castShadow = !isSoftwareGl;
-    spk.add(spkCab);
-
-    const woofer = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.042, 0.042, 0.012, 18),
-      new THREE.MeshStandardMaterial({ color: 0xb45309, roughness: 0.32, metalness: 0.78 })
-    );
-    woofer.rotation.x = Math.PI / 2;
-    woofer.position.set(0, 0.085, 0.076);
-    spk.add(woofer);
-
-    const tweeter = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.018, 0.018, 0.012, 14),
-      brushedAlumMat
-    );
-    tweeter.rotation.x = Math.PI / 2;
-    tweeter.position.set(0, 0.165, 0.076);
-    spk.add(tweeter);
-  });
-
-  // Ceramic Coffee Mug on Desk Right
-  const mugGroup = new THREE.Group();
-  mugGroup.position.set(0.66, 0.78, 0.24);
-  deskGroup.add(mugGroup);
-  const mugBody = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.042, 0.038, 0.092, 18),
-    new THREE.MeshPhysicalMaterial({ color: 0x1e293b, roughness: 0.22, clearcoat: 0.85 })
-  );
-  mugBody.position.y = 0.046;
-  mugBody.castShadow = !isSoftwareGl;
-  const mugCoffee = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.036, 0.036, 0.005, 16),
-    new THREE.MeshStandardMaterial({ color: 0x26140c, roughness: 0.15 })
-  );
-  mugCoffee.position.y = 0.085;
-  const mugHandle = new THREE.Mesh(
-    new THREE.TorusGeometry(0.025, 0.006, 8, 16, Math.PI),
-    new THREE.MeshPhysicalMaterial({ color: 0x1e293b, roughness: 0.22, clearcoat: 0.85 })
-  );
-  mugHandle.rotation.z = -Math.PI / 2;
-  mugHandle.position.set(0.04, 0.048, 0);
-  mugGroup.add(mugBody, mugCoffee, mugHandle);
-
-  // Smartphone on Angled Aluminum Desk Stand
-  const phoneStand = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.08, 0.06), brushedAlumMat);
-  phoneStand.position.set(0.46, 0.82, -0.05);
-  phoneStand.rotation.x = -0.35;
-  deskGroup.add(phoneStand);
-  const phoneBody = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.135, 0.009), matteBlackMat);
-  phoneBody.position.set(0.46, 0.86, -0.03);
-  phoneBody.rotation.x = -0.35;
-  deskGroup.add(phoneBody);
-  const phoneScreen = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.06, 0.125),
-    new THREE.MeshStandardMaterial({ color: 0x0f172a, emissive: 0x38bdf8, emissiveIntensity: 0.22 })
-  );
-  phoneScreen.position.set(0.46, 0.86, -0.024);
-  phoneScreen.rotation.x = -0.35;
-  deskGroup.add(phoneScreen);
-
-  // --- WIRELESS HEADPHONES ON STAND ---
+  // Wireless Headphones on Stand
   const hpGroup = new THREE.Group();
-  hpGroup.position.set(0.95, 0.78, 0.16);
+  hpGroup.position.set(0.96, 0.78, 0.16);
   hpGroup.rotation.y = -0.45;
   deskGroup.add(hpGroup);
 
@@ -1430,10 +779,7 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   hpBase.position.y = 0.01;
   const hpStem = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.26, 10), brushedAlumMat);
   hpStem.position.y = 0.14;
-  const hpBand = new THREE.Mesh(
-    new THREE.TorusGeometry(0.08, 0.012, 8, 20, Math.PI),
-    matteBlackMat
-  );
+  const hpBand = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.012, 8, 20, Math.PI), matteBlackMat);
   hpBand.position.y = 0.2;
   hpGroup.add(hpBase, hpStem, hpBand);
 
@@ -1442,17 +788,13 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
     cup.rotation.z = Math.PI / 2;
     cup.position.set(ex, 0.14, 0);
     hpGroup.add(cup);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.036, 0.005, 6, 16), rgbEmissiveMat);
-    ring.rotation.y = Math.PI / 2;
-    ring.position.set(ex + (ex > 0 ? 0.018 : -0.018), 0.14, 0);
-    hpGroup.add(ring);
   });
   registerHitbox(hpGroup, [0.3, 0.36, 0.28], [0, 0.18, 0], 'headphones');
 
-  // --- ERGONOMIC DESKTOP CHAIR (Facing West Desk!) ---
+  // --- ERGONOMIC DESK CHAIR ---
   const chairGroup = new THREE.Group();
-  chairGroup.position.set(-0.82, 0, 0.72);
-  chairGroup.rotation.y = Math.PI / 2 - 0.22; // Faces West desk (-X), angled slightly toward center
+  chairGroup.position.set(-1.14, 0, 0.44);
+  chairGroup.rotation.y = Math.PI / 2 - 0.22;
   scene.add(chairGroup);
 
   for (let arm = 0; arm < 5; arm++) {
@@ -1478,32 +820,32 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   backrest.castShadow = !isSoftwareGl;
   const headrest = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 0.08), leatherChairMat);
   headrest.position.set(0, 1.32, 0.26);
-  const chairAccent = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.018, 0.018), rgbEmissiveMat);
-  chairAccent.position.set(0, 1.18, 0.29);
-  chairGroup.add(piston, seatCushion, backrest, headrest, chairAccent);
-
-  [-0.3, 0.3].forEach((ax) => {
-    const armPad = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.032, 0.28), matteBlackMat);
-    armPad.position.set(ax, 0.64, 0.02);
-    chairGroup.add(armPad);
-  });
-
+  chairGroup.add(piston, seatCushion, backrest, headrest);
   registerHitbox(chairGroup, [0.85, 1.45, 0.85], [0, 0.72, 0], 'chair');
 
   // ==========================================
-  // 6. EAST WALL: SMART 6-GANG WALL SWITCH PANEL + WALNUT CREDENZA + PLANT + POUF
-  // (East-wall TV removed as requested)
+  // 6. MODULAR GAMING SETUP + ACOUSTIC WALL + X-CROSS LED PANEL
   // ==========================================
-  // 6-Gang Illuminated Wall Switchboard mounted cleanly on East Wall (visible & clickable)
+  const gamingHandles = buildGamingSetup({
+    scene,
+    roomHalfW,
+    roomHalfL,
+    isSoftwareGl,
+    darkDeskWoodMat,
+    matteBlackMat,
+    brushedAlumMat,
+    registerHitbox,
+  });
+
+  // ==========================================
+  // 7. EAST WALL: SMART 6-GANG SWITCHBOARD + CREDENZA + PLANT + LOUNGE SEAT
+  // ==========================================
   const switchPanelGroup = new THREE.Group();
-  switchPanelGroup.position.set(roomHalfW - 0.018, 1.52, -0.78);
+  switchPanelGroup.position.set(roomHalfW - 0.018, 1.52, -1.62);
   switchPanelGroup.rotation.y = -Math.PI / 2;
   scene.add(switchPanelGroup);
 
-  const switchFrame = new THREE.Mesh(
-    new THREE.BoxGeometry(0.72, 0.46, 0.022),
-    matteBlackMat
-  );
+  const switchFrame = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.46, 0.022), matteBlackMat);
   switchFrame.castShadow = !isSoftwareGl;
   switchPanelGroup.add(switchFrame);
 
@@ -1526,7 +868,6 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
     part: RoomInteractivePart;
     rocker: THREE.Mesh;
     ledMat: THREE.MeshStandardMaterial;
-    onColor: number;
   }
 
   const switchSpecs: {
@@ -1535,8 +876,8 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
     onColor: number;
   }[] = [
     { key: 'ceilingLight', part: 'switch_ceiling', onColor: 0xfef08a },
-    { key: 'deskLight', part: 'switch_desk', onColor: 0xfff3d6 },
-    { key: 'rgbLight', part: 'switch_rgb', onColor: 0xa855f7 },
+    { key: 'deskLight', part: 'switch_desk', onColor: 0xf8f9fa },
+    { key: 'rgbLight', part: 'switch_rgb', onColor: 0xf8f9fa },
     { key: 'bedLight', part: 'switch_bed', onColor: 0xfbbf24 },
     { key: 'fan', part: 'switch_fan', onColor: 0x38bdf8 },
     { key: 'ac', part: 'switch_ac', onColor: 0x22d3ee },
@@ -1582,38 +923,27 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
     rocker.add(ledBar);
 
     registerHitbox(slot, [0.16, 0.14, 0.09], [0, 0, 0.02], spec.part);
-    return { key: spec.key, part: spec.part, rocker, ledMat, onColor: spec.onColor };
+    return { key: spec.key, part: spec.part, rocker, ledMat };
   });
 
-  // Low Walnut Sideboard Credenza on East Wall (clean console without TV)
-  const sideboard = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.52, 1.55), walnutMat);
-  sideboard.position.set(roomHalfW - 0.24, 0.26, -1.05);
+  // Low Sideboard Credenza below East X-Cross LED Panel (matching reference image_fa60901b.png)
+  const sideboard = new THREE.Mesh(
+    new THREE.BoxGeometry(0.46, 0.56, 1.72),
+    new THREE.MeshStandardMaterial({ color: 0x383b40, roughness: 0.52 })
+  );
+  sideboard.position.set(roomHalfW - 0.26, 0.28, -0.62);
   sideboard.castShadow = !isSoftwareGl;
   sideboard.receiveShadow = true;
   scene.add(sideboard);
 
-  // Decorative Books & Minimal Desk Clock on East-Wall Credenza
-  const bookStackA = new THREE.Mesh(
-    new THREE.BoxGeometry(0.22, 0.045, 0.3),
-    new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 })
-  );
-  bookStackA.position.set(roomHalfW - 0.24, 0.542, -1.35);
-  const bookStackB = new THREE.Mesh(
-    new THREE.BoxGeometry(0.2, 0.04, 0.27),
-    new THREE.MeshStandardMaterial({ color: 0x31264f, roughness: 0.7 })
-  );
-  bookStackB.position.set(roomHalfW - 0.24, 0.584, -1.35);
-  bookStackB.rotation.y = 0.14;
-  scene.add(bookStackA, bookStackB);
-
-  // Small Floor Potted Plant near East Sideboard
+  // Potted Plant near East Sideboard
   const plantGroup = new THREE.Group();
-  plantGroup.position.set(roomHalfW - 0.34, 0, 0.15);
+  plantGroup.position.set(roomHalfW - 0.38, 0, 0.65);
   scene.add(plantGroup);
 
   const pot = new THREE.Mesh(
     new THREE.CylinderGeometry(0.18, 0.13, 0.32, 16),
-    new THREE.MeshStandardMaterial({ color: 0x262936, roughness: 0.7 })
+    new THREE.MeshStandardMaterial({ color: 0x383b40, roughness: 0.7 })
   );
   pot.position.y = 0.16;
   pot.castShadow = !isSoftwareGl;
@@ -1628,42 +958,22 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
     plantGroup.add(leaf);
   }
 
-  // Compact Lounge Pouf / Accent Seat in Southeast Corner
+  // Lounge Accent Pouf in Southeast Corner
   const poufGroup = new THREE.Group();
-  poufGroup.position.set(1.52, 0, 1.78);
+  poufGroup.position.set(1.75, 0, 2.05);
   scene.add(poufGroup);
 
   const poufBase = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.42, 0.44, 0.36, 20),
-    new THREE.MeshStandardMaterial({ color: 0x222638, roughness: 0.85 })
+    new THREE.CylinderGeometry(0.44, 0.46, 0.36, 20),
+    new THREE.MeshStandardMaterial({ color: 0x383b40, roughness: 0.85 })
   );
   poufBase.position.y = 0.18;
   poufBase.castShadow = !isSoftwareGl;
   poufGroup.add(poufBase);
 
-  const poufCushion = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.4, 0.42, 0.08, 20),
-    new THREE.MeshStandardMaterial({ color: 0x31264f, roughness: 0.88 })
-  );
-  poufCushion.position.y = 0.38;
-  poufGroup.add(poufCushion);
-
   // ==========================================
-  // 7. ARCHITECTURAL WOOD SLATS & PERSONAL WALL PORTRAITS (Authentic Photos Only)
+  // 8. PERSONAL WALL PORTRAITS (Authentic Photos)
   // ==========================================
-  // Vertical walnut acoustic wood slats flanking the North Wall headboard
-  const slatGeo = new THREE.BoxGeometry(0.042, 3.6, 0.025);
-  const slatInstanced = new THREE.InstancedMesh(slatGeo, walnutMat, 26);
-  const slatDummy = new THREE.Object3D();
-  for (let s = 0; s < 26; s++) {
-    slatDummy.position.set(-0.78 + s * 0.08, 1.9, -roomHalfL + 0.015);
-    slatDummy.updateMatrix();
-    slatInstanced.setMatrixAt(s, slatDummy.matrix);
-  }
-  slatInstanced.instanceMatrix.needsUpdate = true;
-  slatInstanced.receiveShadow = true;
-  scene.add(slatInstanced);
-
   const textureLoader = new THREE.TextureLoader();
   const mountWallPortrait = (
     imageUrl: string,
@@ -1677,26 +987,10 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
     frameGroup.rotation.y = rotY;
     scene.add(frameGroup);
 
-    const glowMat = new THREE.MeshBasicMaterial({
-      color: accentColor,
-      transparent: true,
-      opacity: 0.28,
-    });
-    const backGlow = new THREE.Mesh(new THREE.PlaneGeometry(w + 0.14, h + 0.14), glowMat);
-    backGlow.position.z = -0.004;
-    frameGroup.add(backGlow);
-
     const outerFrame = new THREE.Mesh(new THREE.BoxGeometry(w + 0.08, h + 0.08, 0.036), matteBlackMat);
     outerFrame.position.z = 0.016;
     outerFrame.castShadow = !isSoftwareGl;
     frameGroup.add(outerFrame);
-
-    const matBorder = new THREE.Mesh(
-      new THREE.PlaneGeometry(w + 0.02, h + 0.02),
-      new THREE.MeshStandardMaterial({ color: 0x131620, roughness: 0.78 })
-    );
-    matBorder.position.z = 0.035;
-    frameGroup.add(matBorder);
 
     const photoTex = textureLoader.load(imageUrl);
     photoTex.colorSpace = THREE.SRGBColorSpace;
@@ -1708,53 +1002,35 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
         map: photoTex,
         emissive: 0xffffff,
         emissiveMap: photoTex,
-        emissiveIntensity: 0.24,
+        emissiveIntensity: 0.22,
         roughness: 0.38,
-        metalness: 0.02,
       })
     );
     photoPlane.position.z = 0.038;
     frameGroup.add(photoPlane);
 
-    // Subtle glass pane specular coat
-    const frameGlass = new THREE.Mesh(
-      new THREE.PlaneGeometry(w - 0.02, h - 0.02),
-      new THREE.MeshPhysicalMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.06,
-        roughness: 0.06,
-        clearcoat: 1.0,
-      })
-    );
-    frameGlass.position.z = 0.041;
-    frameGroup.add(frameGlass);
-
     registerHitbox(frameGroup, [w + 0.1, h + 0.1, 0.12], [0, 0, 0.04], 'wallart');
   };
 
-  // North Wall (Genuine Golden-Hour Outdoor Portrait above nightstand, visible immediately at entrance)
   mountWallPortrait(
     '/assets/aistudio/WhatsApp_Image_2026-11-18_at_7.07.59_PM_8999fb4b.jpeg',
-    [-1.42, 2.02, -roomHalfL + 0.02],
+    [-1.42, 2.08, -roomHalfL + 0.02],
     0,
     0.86,
     1.1
   );
 
-  // East Wall (Authentic CPI Campus Portrait centered beside the Smart Wall Switchboard)
   mountWallPortrait(
     '/assets/aistudio/WhatsApp_Image_2026-11-18_at_7.07._PM_cba373a6.jpeg',
-    [roomHalfW - 0.02, 1.92, 0.72],
+    [roomHalfW - 0.02, 1.98, 1.45],
     -Math.PI / 2,
     0.92,
     1.18
   );
 
-  // West Wall (Genuine Outdoor Portrait north of workstation window)
   mountWallPortrait(
     '/assets/aistudio/WhatsApp_Image_2026-11-18_at_7.07.59_PM_8999fb4b.jpeg',
-    [-roomHalfW + 0.02, 2.05, -1.25],
+    [-roomHalfW + 0.02, 2.05, -1.45],
     Math.PI / 2,
     0.82,
     1.04
@@ -1765,11 +1041,10 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   }
 
   // ==========================================
-  // CAMERA POSES & GSAP CINEMATIC TRANSITION
+  // CAMERA POSES & STATE MANAGEMENT
   // ==========================================
   let currentState: ExperienceState = initialState;
   let reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let currentMode: LightingMode = 'coding';
   let devicesState: RoomDevicesState = {
     ceilingLight: true,
     deskLight: true,
@@ -1778,88 +1053,114 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
     fan: true,
     ac: true,
   };
+  let isPhoneCharging = false;
+  let isGamingMode = false;
+  let targetSteerDeg = 0;
+  let racingThrottle = false;
+  let racingBrake = false;
   let currentFanSpeed = 4.8;
   let pcBootLevel = initialState === 'BOOTING' || initialState === 'DESKTOP' ? 1 : 0;
 
-  // Mode lighting presets (scaled individually by device on/off switches)
   const modeIntensityTargets = {
-    ceilingLight: 1.8,
-    ceilingFixture: 1.3,
+    ceilingLight: 2.1,
+    ceilingFixture: 1.4,
     ceilingArea: 0.95,
-    purpleWest: 1.85,
-    purpleEast: 1.3,
-    deskArea: 1.35,
-    rgbEmissive: 1.4,
-    pcInternal: 1.45,
-    deskTask: 3.4,
-    bedLight: 1.25,
+    ledWest: 1.45,
+    ledEast: 1.55,
+    deskArea: 1.25,
+    ledEmissive: 1.45,
+    pcInternal: 1.25,
+    deskTask: 3.2,
+    bedLight: 1.4,
   };
 
   const applyLightingPreset = (mode: LightingMode) => {
-    currentMode = mode;
     if (mode === 'study') {
-      modeIntensityTargets.ceilingLight = 2.6;
+      modeIntensityTargets.ceilingLight = 2.8;
       modeIntensityTargets.ceilingFixture = 1.9;
-      modeIntensityTargets.ceilingArea = 1.25;
-      modeIntensityTargets.purpleWest = 0.85;
-      modeIntensityTargets.purpleEast = 0.65;
-      modeIntensityTargets.deskArea = 0.7;
-      modeIntensityTargets.rgbEmissive = 0.7;
-      modeIntensityTargets.pcInternal = 0.8;
-      modeIntensityTargets.deskTask = 3.4;
-      modeIntensityTargets.bedLight = 0.9;
+      modeIntensityTargets.ceilingArea = 1.3;
+      modeIntensityTargets.ledWest = 1.35;
+      modeIntensityTargets.ledEast = 1.4;
+      modeIntensityTargets.deskArea = 1.1;
+      modeIntensityTargets.ledEmissive = 1.2;
+      modeIntensityTargets.pcInternal = 0.85;
+      modeIntensityTargets.deskTask = 3.5;
+      modeIntensityTargets.bedLight = 1.1;
     } else if (mode === 'coding') {
-      modeIntensityTargets.ceilingLight = 1.8;
-      modeIntensityTargets.ceilingFixture = 1.3;
+      modeIntensityTargets.ceilingLight = 2.1;
+      modeIntensityTargets.ceilingFixture = 1.4;
       modeIntensityTargets.ceilingArea = 0.95;
-      modeIntensityTargets.purpleWest = 1.85;
-      modeIntensityTargets.purpleEast = 1.3;
-      modeIntensityTargets.deskArea = 1.35;
-      modeIntensityTargets.rgbEmissive = 1.4;
-      modeIntensityTargets.pcInternal = 1.45;
-      modeIntensityTargets.deskTask = 3.4;
-      modeIntensityTargets.bedLight = 1.25;
+      modeIntensityTargets.ledWest = 1.45;
+      modeIntensityTargets.ledEast = 1.55;
+      modeIntensityTargets.deskArea = 1.25;
+      modeIntensityTargets.ledEmissive = 1.45;
+      modeIntensityTargets.pcInternal = 1.25;
+      modeIntensityTargets.deskTask = 3.2;
+      modeIntensityTargets.bedLight = 1.4;
     } else if (mode === 'relax') {
-      modeIntensityTargets.ceilingLight = 0.55;
-      modeIntensityTargets.ceilingFixture = 0.35;
+      modeIntensityTargets.ceilingLight = 0.6;
+      modeIntensityTargets.ceilingFixture = 0.4;
       modeIntensityTargets.ceilingArea = 0.35;
-      modeIntensityTargets.purpleWest = 1.0;
-      modeIntensityTargets.purpleEast = 0.8;
+      modeIntensityTargets.ledWest = 0.9;
+      modeIntensityTargets.ledEast = 0.95;
       modeIntensityTargets.deskArea = 0.75;
-      modeIntensityTargets.rgbEmissive = 0.85;
-      modeIntensityTargets.pcInternal = 0.9;
-      modeIntensityTargets.deskTask = 2.2;
-      modeIntensityTargets.bedLight = 2.6;
+      modeIntensityTargets.ledEmissive = 0.95;
+      modeIntensityTargets.pcInternal = 0.85;
+      modeIntensityTargets.deskTask = 2.1;
+      modeIntensityTargets.bedLight = 2.5;
     } else {
       modeIntensityTargets.ceilingLight = 0.35;
       modeIntensityTargets.ceilingFixture = 0.25;
       modeIntensityTargets.ceilingArea = 0.2;
-      modeIntensityTargets.purpleWest = 2.9;
-      modeIntensityTargets.purpleEast = 2.3;
-      modeIntensityTargets.deskArea = 1.85;
-      modeIntensityTargets.rgbEmissive = 2.1;
-      modeIntensityTargets.pcInternal = 2.2;
-      modeIntensityTargets.deskTask = 2.8;
+      modeIntensityTargets.ledWest = 2.1;
+      modeIntensityTargets.ledEast = 2.2;
+      modeIntensityTargets.deskArea = 1.6;
+      modeIntensityTargets.ledEmissive = 1.85;
+      modeIntensityTargets.pcInternal = 1.75;
+      modeIntensityTargets.deskTask = 2.7;
       modeIntensityTargets.bedLight = 1.35;
     }
   };
 
-  // Entrance camera inside South Doorway looking North-West across whole 12x10x9 room
-  const entranceCamPos = new THREE.Vector3(0.15, 1.85, 2.25);
-  const entranceLookAt = new THREE.Vector3(-0.5, 1.28, -0.45);
+  // Architectural Camera Targets
+  const entranceCamPos = new THREE.Vector3(0.42, 1.95, 2.58);
+  const entranceLookAt = new THREE.Vector3(-0.68, 1.24, -0.35);
 
-  // Seated camera in the West-Wall Desk Chair looking West at Dual Monitors & PC Tower
-  const seatedCamPos = new THREE.Vector3(-0.88, 1.42, 0.66);
-  const seatedLookAt = new THREE.Vector3(-2.05, 1.24, 0.64);
+  const seatedCamPos = new THREE.Vector3(-1.22, 1.42, 0.42);
+  const seatedLookAt = new THREE.Vector3(-2.45, 1.24, 0.4);
 
-  // Wall Switchboard Inspection Camera facing East Wall Smart Switch Panel
-  const wallSwitchCamPos = new THREE.Vector3(0.68, 1.56, -0.78);
-  const wallSwitchLookAt = new THREE.Vector3(roomHalfW - 0.02, 1.52, -0.78);
+  // Bed Lying-Down Perspective (head on pillow looking across room)
+  const bedLyingCamPos = new THREE.Vector3(0.32, 0.74, -2.42);
+  const bedLyingLookAt = new THREE.Vector3(0.18, 1.48, 1.15);
+
+  // Separate East Sideboard Smartphone & Wall Outlet Camera
+  const phoneCamPos = new THREE.Vector3(1.18, 1.04, -0.18);
+  const phoneLookAt = new THREE.Vector3(2.42, 0.72, -0.18);
+
+  // Sim-Racing Cockpit Perspective (inside haptic bucket seat facing triple monitors + wheel)
+  const gamingCamPos = new THREE.Vector3(-1.65, 1.32, 1.56);
+  const gamingLookAt = new THREE.Vector3(-1.65, 1.12, 2.38);
+
+  // East Wall Switchboard Camera
+  const wallSwitchCamPos = new THREE.Vector3(1.12, 1.56, -1.62);
+  const wallSwitchLookAt = new THREE.Vector3(roomHalfW - 0.02, 1.52, -1.62);
 
   _lookHelper.rotation.order = 'YXZ';
   _lookHelper.position.copy(seatedCamPos);
   _lookHelper.lookAt(seatedLookAt);
   const seatedEuler = _lookHelper.rotation.clone();
+
+  _lookHelper.position.copy(bedLyingCamPos);
+  _lookHelper.lookAt(bedLyingLookAt);
+  const bedLyingEuler = _lookHelper.rotation.clone();
+
+  _lookHelper.position.copy(phoneCamPos);
+  _lookHelper.lookAt(phoneLookAt);
+  const phoneEuler = _lookHelper.rotation.clone();
+
+  _lookHelper.position.copy(gamingCamPos);
+  _lookHelper.lookAt(gamingLookAt);
+  const gamingEuler = _lookHelper.rotation.clone();
 
   _lookHelper.position.copy(wallSwitchCamPos);
   _lookHelper.lookAt(wallSwitchLookAt);
@@ -1870,22 +1171,33 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
 
   let activeTimeline: gsap.core.Timeline | null = null;
   let isGsapAnimating = false;
+  let pinnedPose: 'NONE' | 'BED' | 'PHONE' | 'GAMING' = 'NONE';
 
-  const animateCameraToDesk = (onComplete?: () => void) => {
+  const explorerPos = new THREE.Vector3(0.45, 1.68, 2.05);
+  let explorerYaw = 0.42;
+  let explorerPitch = -0.06;
+
+  const glideCameraTo = (
+    destPos: THREE.Vector3,
+    destEuler: THREE.Euler,
+    durationSec: number,
+    onComplete?: () => void
+  ) => {
     if (activeTimeline) {
       activeTimeline.kill();
       activeTimeline = null;
     }
-
     isGsapAnimating = true;
-    const duration = reducedMotion ? 0.2 : 1.7;
-    const ease = 'power3.inOut';
-
+    const duration = reducedMotion ? 0.2 : durationSec;
     const deltaY = Math.atan2(
-      Math.sin(seatedEuler.y - camera.rotation.y),
-      Math.cos(seatedEuler.y - camera.rotation.y)
+      Math.sin(destEuler.y - camera.rotation.y),
+      Math.cos(destEuler.y - camera.rotation.y)
     );
     const targetRotY = camera.rotation.y + deltaY;
+
+    explorerPos.copy(destPos);
+    explorerYaw = destEuler.y;
+    explorerPitch = destEuler.x;
 
     activeTimeline = gsap.timeline({
       onComplete: () => {
@@ -1897,143 +1209,66 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
 
     activeTimeline.to(
       camera.position,
-      {
-        x: seatedCamPos.x,
-        y: seatedCamPos.y,
-        z: seatedCamPos.z,
-        duration,
-        ease,
-      },
+      { x: destPos.x, y: destPos.y, z: destPos.z, duration, ease: 'power3.inOut' },
       0
     );
-
     activeTimeline.to(
       camera.rotation,
-      {
-        x: seatedEuler.x,
-        y: targetRotY,
-        z: 0,
-        duration,
-        ease,
-      },
+      { x: destEuler.x, y: targetRotY, z: 0, duration, ease: 'power3.inOut' },
       0
     );
+    return activeTimeline;
+  };
 
-    // Smoothly tuck chair to West desk facing -X
-    activeTimeline.to(
+  const animateCameraToDesk = (onComplete?: () => void) => {
+    pinnedPose = 'NONE';
+    const tl = glideCameraTo(seatedCamPos, seatedEuler, 1.65, onComplete);
+    tl.to(
       chairGroup.position,
-      {
-        x: -1.02,
-        z: 0.7,
-        duration: duration * 0.85,
-        ease: 'power2.out',
-      },
+      { x: -1.36, z: 0.44, duration: reducedMotion ? 0.2 : 1.35, ease: 'power2.out' },
       0
     );
-    activeTimeline.to(
+    tl.to(
       chairGroup.rotation,
-      {
-        y: Math.PI / 2,
-        duration: duration * 0.85,
-        ease: 'power2.out',
-      },
+      { y: Math.PI / 2, duration: reducedMotion ? 0.2 : 1.35, ease: 'power2.out' },
       0
     );
+  };
+
+  const animateCameraToBed = (onComplete?: () => void) => {
+    pinnedPose = 'BED';
+    glideCameraTo(bedLyingCamPos, bedLyingEuler, 1.45, onComplete);
+  };
+
+  const animateCameraToPhone = (onComplete?: () => void) => {
+    pinnedPose = 'PHONE';
+    glideCameraTo(phoneCamPos, phoneEuler, 1.25, onComplete);
+  };
+
+  const animateCameraToGaming = (onComplete?: () => void) => {
+    pinnedPose = 'GAMING';
+    glideCameraTo(gamingCamPos, gamingEuler, 1.3, onComplete);
   };
 
   const animateCameraToWallSwitch = (onComplete?: () => void) => {
-    if (activeTimeline) {
-      activeTimeline.kill();
-      activeTimeline = null;
-    }
-    isGsapAnimating = true;
-    const duration = reducedMotion ? 0.2 : 1.15;
-    const deltaY = Math.atan2(
-      Math.sin(wallSwitchEuler.y - camera.rotation.y),
-      Math.cos(wallSwitchEuler.y - camera.rotation.y)
-    );
-    const targetRotY = camera.rotation.y + deltaY;
-
-    explorerPos.copy(wallSwitchCamPos);
-    explorerYaw = wallSwitchEuler.y;
-    explorerPitch = wallSwitchEuler.x;
-
-    activeTimeline = gsap.timeline({
-      onComplete: () => {
-        isGsapAnimating = false;
-        activeTimeline = null;
-        onComplete?.();
-      },
-    });
-
-    activeTimeline.to(camera.position, {
-      x: wallSwitchCamPos.x,
-      y: wallSwitchCamPos.y,
-      z: wallSwitchCamPos.z,
-      duration,
-      ease: 'power3.inOut',
-    }, 0);
-
-    activeTimeline.to(camera.rotation, {
-      x: wallSwitchEuler.x,
-      y: targetRotY,
-      z: 0,
-      duration,
-      ease: 'power3.inOut',
-    }, 0);
+    pinnedPose = 'NONE';
+    glideCameraTo(wallSwitchCamPos, wallSwitchEuler, 1.15, onComplete);
   };
 
   const animateCameraToOverview = (onComplete?: () => void) => {
-    if (activeTimeline) {
-      activeTimeline.kill();
-      activeTimeline = null;
-    }
-    isGsapAnimating = true;
-    const duration = reducedMotion ? 0.2 : 1.05;
-
+    pinnedPose = 'NONE';
     _lookHelper.position.copy(entranceCamPos);
     _lookHelper.lookAt(entranceLookAt);
     const overviewEuler = _lookHelper.rotation.clone();
-    const deltaY = Math.atan2(
-      Math.sin(overviewEuler.y - camera.rotation.y),
-      Math.cos(overviewEuler.y - camera.rotation.y)
-    );
-    const targetRotY = camera.rotation.y + deltaY;
-
-    explorerPos.set(0.35, 1.65, 1.85);
-    explorerYaw = 0.42;
-    explorerPitch = -0.06;
-
-    activeTimeline = gsap.timeline({
-      onComplete: () => {
-        isGsapAnimating = false;
-        activeTimeline = null;
-        onComplete?.();
-      },
+    glideCameraTo(entranceCamPos, overviewEuler, 1.05, () => {
+      explorerPos.set(0.45, 1.68, 2.05);
+      explorerYaw = 0.42;
+      explorerPitch = -0.06;
+      onComplete?.();
     });
-
-    activeTimeline.to(camera.position, {
-      x: entranceCamPos.x,
-      y: entranceCamPos.y,
-      z: entranceCamPos.z,
-      duration,
-      ease: 'power3.inOut',
-    }, 0);
-
-    activeTimeline.to(camera.rotation, {
-      x: overviewEuler.x,
-      y: targetRotY,
-      z: 0,
-      duration,
-      ease: 'power3.inOut',
-    }, 0);
   };
 
-  // Free exploration player rig
-  const explorerPos = new THREE.Vector3(0.35, 1.65, 1.85);
-  let explorerYaw = 0.42;
-  let explorerPitch = -0.06;
-
+  // Input & Raycaster Rig
   const keysPressed = new Set<string>();
   let joyMoveX = 0;
   let joyMoveZ = 0;
@@ -2050,7 +1285,7 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   raycaster.layers.set(1);
 
   const onKeyDown = (e: KeyboardEvent) => {
-    if (currentState !== 'EXPLORING') return;
+    if (currentState !== 'EXPLORING' || pinnedPose !== 'NONE') return;
     if (
       ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D'].includes(
         e.key
@@ -2081,7 +1316,7 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
     pointerHoverX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     pointerHoverY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
-    if (isDraggingLook && currentState === 'EXPLORING') {
+    if (isDraggingLook && currentState === 'EXPLORING' && pinnedPose === 'NONE') {
       const dx = e.clientX - lastPointerX;
       const dy = e.clientY - lastPointerY;
       lastPointerX = e.clientX;
@@ -2177,17 +1412,34 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
     const desiredPower =
       currentState === 'BOOTING' || currentState === 'DESKTOP' ? 1 : 0;
     pcBootLevel = THREE.MathUtils.damp(pcBootLevel, desiredPower, 4.5, dt);
-    mainScreenMat.emissiveIntensity = 0.04 + pcBootLevel * 0.85;
-    sideScreenMat.emissiveIntensity = 0.03 + pcBootLevel * 0.72;
-    deskMonitorGlow.intensity = 0.18 + pcBootLevel * 2.1;
+    mainScreenMat.emissiveIntensity = 0.06 + pcBootLevel * 0.82;
+    sideScreenMat.emissiveIntensity = 0.05 + pcBootLevel * 0.72;
+    deskMonitorGlow.intensity = 0.16 + pcBootLevel * 1.9;
 
     powerBtnMat.emissiveIntensity =
-      currentState === 'SEATED'
-        ? 2.1 + Math.sin(elapsed * 4.2) * 0.9
-        : 1.1 + pcBootLevel * 1.1;
+      currentState === 'SEATED' ? 1.85 : 1.0 + pcBootLevel * 0.9;
 
-    // 2. Smoothly damp all individual lights, wall switches, AC vent & ceiling fan
+    // 2. Dynamic PBR Lighting & Dark-Room AO Contrast
     const dampLambda = reducedMotion ? 24 : 9;
+    const anyRoomLightOn =
+      devicesState.ceilingLight ||
+      devicesState.deskLight ||
+      devicesState.rgbLight ||
+      devicesState.bedLight;
+
+    hemiLight.intensity = THREE.MathUtils.damp(
+      hemiLight.intensity,
+      anyRoomLightOn ? 0.56 : 0.06,
+      dampLambda,
+      dt
+    );
+    windowMoonLight.intensity = THREE.MathUtils.damp(
+      windowMoonLight.intensity,
+      anyRoomLightOn ? 0.95 : 1.45,
+      dampLambda,
+      dt
+    );
+
     ceilingLightRig.intensity = THREE.MathUtils.damp(
       ceilingLightRig.intensity,
       devicesState.ceilingLight ? modeIntensityTargets.ceilingLight : 0,
@@ -2217,20 +1469,20 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
     );
     lightbarDiffuserMat.emissiveIntensity = THREE.MathUtils.damp(
       lightbarDiffuserMat.emissiveIntensity,
-      devicesState.deskLight ? 1.85 : 0.04,
+      devicesState.deskLight ? 1.65 : 0.04,
       dampLambda,
       dt
     );
 
-    purpleAmbientWest.intensity = THREE.MathUtils.damp(
-      purpleAmbientWest.intensity,
-      devicesState.rgbLight ? modeIntensityTargets.purpleWest : 0,
+    wallLedWashWest.intensity = THREE.MathUtils.damp(
+      wallLedWashWest.intensity,
+      devicesState.rgbLight ? modeIntensityTargets.ledWest : 0,
       dampLambda,
       dt
     );
-    purpleAmbientEast.intensity = THREE.MathUtils.damp(
-      purpleAmbientEast.intensity,
-      devicesState.rgbLight ? modeIntensityTargets.purpleEast : 0,
+    wallLedWashEast.intensity = THREE.MathUtils.damp(
+      wallLedWashEast.intensity,
+      devicesState.rgbLight ? modeIntensityTargets.ledEast : 0,
       dampLambda,
       dt
     );
@@ -2242,9 +1494,9 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
         dt
       );
     }
-    rgbEmissiveMat.emissiveIntensity = THREE.MathUtils.damp(
-      rgbEmissiveMat.emissiveIntensity,
-      devicesState.rgbLight ? modeIntensityTargets.rgbEmissive : 0.04,
+    ledPanelMat.emissiveIntensity = THREE.MathUtils.damp(
+      ledPanelMat.emissiveIntensity,
+      devicesState.rgbLight ? modeIntensityTargets.ledEmissive : 0.04,
       dampLambda,
       dt
     );
@@ -2261,11 +1513,23 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
       dampLambda,
       dt
     );
-    bedsideShadeMat.emissiveIntensity = THREE.MathUtils.damp(
-      bedsideShadeMat.emissiveIntensity,
+    bedHandles.bedsideShadeMat.emissiveIntensity = THREE.MathUtils.damp(
+      bedHandles.bedsideShadeMat.emissiveIntensity,
       devicesState.bedLight ? 1.15 : 0.03,
       dampLambda,
       dt
+    );
+
+    // Modular sub-builders updates
+    phoneHandles.updateChargingVisuals(isPhoneCharging, dt);
+    gamingHandles.updateGamingVisuals(
+      isGamingMode,
+      targetSteerDeg,
+      racingThrottle,
+      racingBrake,
+      devicesState.rgbLight,
+      dt,
+      onRacingTelemetry
     );
 
     // AC vent louver & display LED
@@ -2277,7 +1541,7 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
     );
     acLedMat.emissiveIntensity = THREE.MathUtils.damp(
       acLedMat.emissiveIntensity,
-      devicesState.ac ? 1.6 : 0.06,
+      devicesState.ac ? 1.5 : 0.06,
       dampLambda,
       dt
     );
@@ -2293,15 +1557,15 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
       );
       sw.ledMat.emissiveIntensity = THREE.MathUtils.damp(
         sw.ledMat.emissiveIntensity,
-        isOn ? 1.9 : 0.06,
+        isOn ? 1.8 : 0.06,
         14,
         dt
       );
     });
 
-    // Spin PC fans & smoothly ramp 48" BLDC Ceiling Fan
+    // Spin PC fans & Ceiling Fan
     if (!reducedMotion) {
-      const pcFanSpeed = 1.4 + pcBootLevel * 5.4;
+      const pcFanSpeed = 1.4 + pcBootLevel * 5.2;
       pcFans.forEach((fan, idx) => {
         fan.rotation.z += dt * (pcFanSpeed + idx * 0.35);
       });
@@ -2316,14 +1580,53 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
       }
     }
 
-    // 3. Camera Choreography
+    // 3. Camera Choreography & Exploration Bounds
     if (!isGsapAnimating) {
       const camLambda = reducedMotion ? 24 : isSoftwareGl ? 14 : 5.5;
 
-      if (currentState === 'ENTRANCE') {
-        const sway = reducedMotion ? 0 : Math.sin(elapsed * 0.45) * 0.08;
+      if (pinnedPose === 'BED') {
+        const subtleX = reducedMotion ? 0 : pointerHoverX * 0.05;
+        const subtleY = reducedMotion ? 0 : pointerHoverY * 0.04;
+        _targetPos.copy(bedLyingCamPos);
+        _targetLook.set(
+          bedLyingLookAt.x + subtleX * 0.4,
+          bedLyingLookAt.y + subtleY * 0.3,
+          bedLyingLookAt.z
+        );
+        camera.position.x = THREE.MathUtils.damp(camera.position.x, _targetPos.x, camLambda, dt);
+        camera.position.y = THREE.MathUtils.damp(camera.position.y, _targetPos.y, camLambda, dt);
+        camera.position.z = THREE.MathUtils.damp(camera.position.z, _targetPos.z, camLambda, dt);
+        camera.lookAt(_targetLook);
+      } else if (pinnedPose === 'PHONE') {
+        const subtleX = reducedMotion ? 0 : pointerHoverX * 0.03;
+        const subtleY = reducedMotion ? 0 : pointerHoverY * 0.03;
+        _targetPos.copy(phoneCamPos);
+        _targetLook.set(
+          phoneLookAt.x,
+          phoneLookAt.y + subtleY * 0.18,
+          phoneLookAt.z + subtleX * 0.2
+        );
+        camera.position.x = THREE.MathUtils.damp(camera.position.x, _targetPos.x, camLambda, dt);
+        camera.position.y = THREE.MathUtils.damp(camera.position.y, _targetPos.y, camLambda, dt);
+        camera.position.z = THREE.MathUtils.damp(camera.position.z, _targetPos.z, camLambda, dt);
+        camera.lookAt(_targetLook);
+      } else if (pinnedPose === 'GAMING') {
+        const subtleX = reducedMotion ? 0 : pointerHoverX * 0.04;
+        const subtleY = reducedMotion ? 0 : pointerHoverY * 0.03;
+        _targetPos.copy(gamingCamPos);
+        _targetLook.set(
+          gamingLookAt.x + subtleX * 0.28,
+          gamingLookAt.y + subtleY * 0.22,
+          gamingLookAt.z
+        );
+        camera.position.x = THREE.MathUtils.damp(camera.position.x, _targetPos.x, camLambda, dt);
+        camera.position.y = THREE.MathUtils.damp(camera.position.y, _targetPos.y, camLambda, dt);
+        camera.position.z = THREE.MathUtils.damp(camera.position.z, _targetPos.z, camLambda, dt);
+        camera.lookAt(_targetLook);
+      } else if (currentState === 'ENTRANCE') {
+        const sway = reducedMotion ? 0 : Math.sin(elapsed * 0.4) * 0.06;
         _targetPos.set(
-          entranceCamPos.x + sway + pointerHoverX * 0.12,
+          entranceCamPos.x + sway + pointerHoverX * 0.1,
           entranceCamPos.y,
           entranceCamPos.z
         );
@@ -2334,7 +1637,7 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
         camera.position.z = THREE.MathUtils.damp(camera.position.z, _targetPos.z, camLambda, dt);
         camera.lookAt(_targetLook);
 
-        chairGroup.position.x = THREE.MathUtils.damp(chairGroup.position.x, -0.82, 5, dt);
+        chairGroup.position.x = THREE.MathUtils.damp(chairGroup.position.x, -1.14, 5, dt);
         chairGroup.rotation.y = THREE.MathUtils.damp(
           chairGroup.rotation.y,
           Math.PI / 2 - 0.22,
@@ -2342,7 +1645,7 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
           dt
         );
       } else if (currentState === 'EXPLORING') {
-        chairGroup.position.x = THREE.MathUtils.damp(chairGroup.position.x, -0.82, 5, dt);
+        chairGroup.position.x = THREE.MathUtils.damp(chairGroup.position.x, -1.14, 5, dt);
         chairGroup.rotation.y = THREE.MathUtils.damp(
           chairGroup.rotation.y,
           Math.PI / 2 - 0.22,
@@ -2363,16 +1666,17 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
         _forward.set(-Math.sin(explorerYaw), 0, -Math.cos(explorerYaw)).normalize();
         _right.crossVectors(_forward, _upAxis).normalize();
 
-        const speed = 2.4 * dt;
+        const speed = 2.5 * dt;
         if (Math.abs(moveForward) > 0.01 || Math.abs(moveStrafe) > 0.01) {
           const nextX = explorerPos.x + (_forward.x * moveForward + _right.x * moveStrafe) * speed;
           const nextZ = explorerPos.z + (_forward.z * moveForward + _right.z * moveStrafe) * speed;
 
-          // Clamp strictly inside 12 x 10 ft room bounds with desk/bed safety
-          const clampedX = THREE.MathUtils.clamp(nextX, -1.15, 1.85);
-          const clampedZ = THREE.MathUtils.clamp(nextZ, -2.15, 2.28);
-          const hitsBed = clampedX > -0.95 && clampedX < 1.45 && clampedZ < 0.25;
-          if (!hitsBed) {
+          const clampedX = THREE.MathUtils.clamp(nextX, -1.45, 2.02);
+          const clampedZ = THREE.MathUtils.clamp(nextZ, -2.35, 2.45);
+          const hitsBed = clampedX > -0.95 && clampedX < 1.55 && clampedZ < 0.05;
+          const hitsSideboard = clampedX > 1.88 && clampedZ > -1.62 && clampedZ < 0.42;
+          const hitsGamingBay = clampedX < -0.45 && clampedZ > 1.15;
+          if (!hitsBed && !hitsSideboard && !hitsGamingBay) {
             explorerPos.x = clampedX;
             explorerPos.z = clampedZ;
           }
@@ -2393,7 +1697,7 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
         currentState === 'BOOTING' ||
         currentState === 'DESKTOP'
       ) {
-        const subtleX = reducedMotion ? 0 : pointerHoverX * 0.06;
+        const subtleX = reducedMotion ? 0 : pointerHoverX * 0.05;
         const subtleY = reducedMotion ? 0 : pointerHoverY * 0.04;
         _targetPos.set(
           seatedCamPos.x,
@@ -2437,14 +1741,17 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
           activeTimeline = null;
           isGsapAnimating = false;
         }
-        if (explorerPos.x < -0.5) {
-          explorerPos.set(0.35, 1.65, 1.85);
+        if (explorerPos.x < -1.1) {
+          explorerPos.set(0.45, 1.68, 2.05);
           explorerYaw = 0.42;
           explorerPitch = -0.06;
         }
       }
     },
     animateCameraToDesk,
+    animateCameraToBed,
+    animateCameraToPhone,
+    animateCameraToGaming,
     animateCameraToWallSwitch,
     animateCameraToOverview,
     setMoveInput(dx: number, dz: number) {
@@ -2453,20 +1760,28 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
     },
     setAccentColor(hex: string) {
       const c = new THREE.Color(hex);
-      rgbEmissiveMat.color.copy(c);
-      rgbEmissiveMat.emissive.copy(c);
-      purpleAmbientWest.color.copy(c);
-      purpleAmbientEast.color.copy(c);
       pcInternalLight.color.copy(c);
-      if (deskBiasArea) {
-        deskBiasArea.color.copy(c);
-      }
+      powerBtnMat.color.copy(c);
+      powerBtnMat.emissive.copy(c);
     },
     setLightingMode(mode: LightingMode) {
       applyLightingPreset(mode);
     },
     setDevicesState(nextDevices: RoomDevicesState) {
       devicesState = { ...nextDevices };
+    },
+    setChargingState(charging: boolean) {
+      isPhoneCharging = charging;
+    },
+    setGamingMode(enabled: boolean) {
+      isGamingMode = enabled;
+    },
+    setSteeringWheelAngle(deg: number) {
+      targetSteerDeg = deg;
+    },
+    setRacingInput(throttle: boolean, brake: boolean) {
+      racingThrottle = throttle;
+      racingBrake = brake;
     },
     setFanEnabled(enabled: boolean) {
       devicesState = { ...devicesState, fan: enabled };
