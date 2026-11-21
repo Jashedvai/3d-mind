@@ -688,13 +688,13 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
     ctx.stroke();
 
     // Instrument Cluster Binnacle Backing (Centered Left-of-Center Driver Cluster)
-    const cxSpeed = 262;
+    const cxSpeed = 198;
     const cyGauge = 486;
-    const rGauge = 68;
+    const rGauge = 70;
 
-    const cxRpm = 474;
+    const cxRpm = 484;
 
-    // Helper: Draw Analog Circular Gauge
+    // Helper: Draw Analog Circular Gauge with Tapered Animated Needle
     const drawDial = (
       cx: number,
       cy: number,
@@ -704,8 +704,11 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
       unitText: string,
       fraction: number,
       accent: string,
-      redlineStart?: number
+      redlineStart?: number,
+      scaleLabels?: number[]
     ) => {
+      const clampedFrac = Math.min(1, Math.max(0, fraction));
+
       ctx.fillStyle = '#090c12';
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -718,11 +721,18 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
       const startAng = Math.PI * 0.75;
       const sweepAng = Math.PI * 1.5;
 
-      // Active arc glow
+      // Track background arc
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r - 9, startAng, startAng + sweepAng);
+      ctx.stroke();
+
+      // Active arc fill
       ctx.strokeStyle = accent;
       ctx.lineWidth = 6;
       ctx.beginPath();
-      ctx.arc(cx, cy, r - 9, startAng, startAng + sweepAng * Math.min(1, Math.max(0, fraction)));
+      ctx.arc(cx, cy, r - 9, startAng, startAng + sweepAng * clampedFrac);
       ctx.stroke();
 
       if (redlineStart !== undefined) {
@@ -733,48 +743,79 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
         ctx.stroke();
       }
 
-      // Tick marks
-      for (let t = 0; t <= 10; t++) {
-        const ang = startAng + (t / 10) * sweepAng;
-        const inner = r - 18;
+      // Major & Minor Tick marks
+      const tickCount = 16;
+      for (let t = 0; t <= tickCount; t++) {
+        const frac = t / tickCount;
+        const ang = startAng + frac * sweepAng;
+        const isMajor = t % 2 === 0;
+        const inner = isMajor ? r - 18 : r - 13;
         const outer = r - 5;
-        ctx.strokeStyle = redlineStart !== undefined && t / 10 >= redlineStart ? '#ef4444' : '#94A3B8';
-        ctx.lineWidth = t % 2 === 0 ? 2.5 : 1.2;
+        ctx.strokeStyle =
+          redlineStart !== undefined && frac >= redlineStart
+            ? '#ef4444'
+            : isMajor
+              ? '#CBD5E1'
+              : '#64748B';
+        ctx.lineWidth = isMajor ? 2.2 : 1.1;
         ctx.beginPath();
         ctx.moveTo(cx + Math.cos(ang) * inner, cy + Math.sin(ang) * inner);
         ctx.lineTo(cx + Math.cos(ang) * outer, cy + Math.sin(ang) * outer);
         ctx.stroke();
       }
 
-      // Needle
-      const nAng = startAng + sweepAng * Math.min(1, Math.max(0, fraction));
-      ctx.strokeStyle = '#f97316';
-      ctx.lineWidth = 3.5;
+      // Numeric Scale Graduations
+      if (scaleLabels && scaleLabels.length > 1) {
+        ctx.fillStyle = '#94A3B8';
+        ctx.font = '600 9px monospace';
+        ctx.textAlign = 'center';
+        scaleLabels.forEach((lbl, idx) => {
+          const frac = idx / (scaleLabels.length - 1);
+          const ang = startAng + frac * sweepAng;
+          const lr = r - 27;
+          ctx.fillText(String(lbl), cx + Math.cos(ang) * lr, cy + Math.sin(ang) * lr + 3);
+        });
+      }
+
+      // Tapered Racing Needle + Counterweight
+      const nAng = startAng + sweepAng * clampedFrac;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(nAng);
+      ctx.fillStyle = '#f97316';
       ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(cx + Math.cos(nAng) * (r - 16), cy + Math.sin(nAng) * (r - 16));
-      ctx.stroke();
+      ctx.moveTo(-14, -3.2);
+      ctx.lineTo(r - 15, -1.1);
+      ctx.lineTo(r - 15, 1.1);
+      ctx.lineTo(-14, 3.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
 
       ctx.fillStyle = '#e2e8f0';
       ctx.beginPath();
-      ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+      ctx.arc(cx, cy, 7.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.textAlign = 'center';
       ctx.fillStyle = '#94A3B8';
       ctx.font = '600 10px monospace';
-      ctx.fillText(title, cx, cy - 22);
+      ctx.fillText(title, cx, cy - 16);
 
       ctx.fillStyle = '#F8FAFC';
-      ctx.font = '700 26px monospace';
-      ctx.fillText(valueText, cx, cy + 34);
+      ctx.font = '700 24px monospace';
+      ctx.fillText(valueText, cx, cy + 36);
 
       ctx.fillStyle = accent;
-      ctx.font = '600 11px monospace';
-      ctx.fillText(unitText, cx, cy + 50);
+      ctx.font = '600 10px monospace';
+      ctx.fillText(unitText, cx, cy + 51);
     };
 
-    // Speedometer Dial (Left)
+    // Speedometer Dial (Left — completely clear of steering wheel rim)
     drawDial(
       cxSpeed,
       cyGauge,
@@ -783,10 +824,12 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
       String(Math.round(speedKmh)),
       'KM/H',
       speedKmh / 320,
-      '#38BDF8'
+      speedKmh >= 260 ? '#EF4444' : speedKmh >= 200 ? '#F59E0B' : '#38BDF8',
+      260 / 320,
+      [0, 80, 160, 240, 320]
     );
 
-    // Tachometer / RPM + Gear Dial (Center)
+    // Tachometer / RPM + Gear Dial (Center-Right)
     drawDial(
       cxRpm,
       cyGauge,
@@ -804,26 +847,26 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.roundRect(560, 434, 112, 124, 12);
+    ctx.roundRect(566, 434, 108, 124, 12);
     ctx.fill();
     ctx.stroke();
 
     ctx.textAlign = 'center';
     ctx.fillStyle = '#94A3B8';
     ctx.font = '600 10px monospace';
-    ctx.fillText('CIRCUIT', 616, 454);
+    ctx.fillText('CIRCUIT', 620, 454);
 
     ctx.strokeStyle = '#475569';
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.ellipse(616, 496, 36, 24, 0.25, 0, Math.PI * 2);
+    ctx.ellipse(620, 496, 35, 23, 0.25, 0, Math.PI * 2);
     ctx.stroke();
     const mapDotAng = (distanceM * 0.015) % (Math.PI * 2);
     ctx.fillStyle = '#38BDF8';
     ctx.beginPath();
     ctx.arc(
-      616 + Math.cos(mapDotAng) * 36 * Math.cos(0.25) - Math.sin(mapDotAng) * 24 * Math.sin(0.25),
-      496 + Math.cos(mapDotAng) * 36 * Math.sin(0.25) + Math.sin(mapDotAng) * 24 * Math.cos(0.25),
+      620 + Math.cos(mapDotAng) * 35 * Math.cos(0.25) - Math.sin(mapDotAng) * 23 * Math.sin(0.25),
+      496 + Math.cos(mapDotAng) * 35 * Math.sin(0.25) + Math.sin(mapDotAng) * 23 * Math.cos(0.25),
       5,
       0,
       Math.PI * 2
@@ -832,39 +875,39 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
 
     ctx.fillStyle = '#CBD5E1';
     ctx.font = '600 10px monospace';
-    ctx.fillText('POS 2 / 12', 616, 544);
+    ctx.fillText('POS 2 / 12', 620, 544);
 
-    // 6. Rotating Cockpit Steering Wheel Silhouette (Bottom Left Driver Position)
+    // 6. Rotating Cockpit Steering Wheel Silhouette (Centered Between Speedometer & Tachometer)
     ctx.save();
-    ctx.translate(368, 546);
+    ctx.translate(342, 548);
     ctx.rotate((steerDeg * Math.PI) / 180);
 
     // Spokes
     ctx.fillStyle = '#1f2430';
-    ctx.fillRect(-94, -11, 188, 22);
-    ctx.fillRect(-13, 0, 26, 92);
+    ctx.fillRect(-86, -10, 172, 20);
+    ctx.fillRect(-12, 0, 24, 86);
 
     // Outer wheel rim
     ctx.strokeStyle = '#12151c';
-    ctx.lineWidth = 21;
+    ctx.lineWidth = 19;
     ctx.beginPath();
-    ctx.arc(0, 0, 104, 0, Math.PI * 2);
+    ctx.arc(0, 0, 94, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.strokeStyle = 'rgba(255,255,255,0.12)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(0, 0, 114, 0, Math.PI * 2);
+    ctx.arc(0, 0, 104, 0, Math.PI * 2);
     ctx.stroke();
 
     // Top 12-o'clock center stripe
     ctx.fillStyle = '#ef4444';
-    ctx.fillRect(-6, -115, 12, 21);
+    ctx.fillRect(-5, -104, 10, 19);
 
     // Center hub + shift LEDs
     ctx.fillStyle = '#181c24';
     ctx.beginPath();
-    ctx.arc(0, 0, 32, 0, Math.PI * 2);
+    ctx.arc(0, 0, 30, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#38BDF8';
     ctx.font = '700 12px monospace';

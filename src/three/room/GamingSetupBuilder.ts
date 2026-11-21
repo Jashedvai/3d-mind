@@ -440,7 +440,7 @@ export function buildGamingSetup(cfg: GamingSetupConfig): GamingSetupHandles {
       }
 
       telemetryAccum += dt;
-      if (telemetryAccum >= 0.12) {
+      if (telemetryAccum >= 0.05) {
         telemetryAccum = 0;
         onTelemetry?.({
           speedKmh: Math.round(carSpeedKmh),
