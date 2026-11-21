@@ -338,16 +338,13 @@ export const PROJECTS: ProjectItem[] = [
     status: 'in-progress',
     statusLabel: 'Phase 1 Codebase Delivered',
     featured: true,
-    image:
-      "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 480'%3E%3Crect width='800' height='480' fill='%230B0F1A'/%3E%3Crect x='28' y='28' width='744' height='424' rx='20' fill='%23111827' stroke='%23334155' stroke-width='2'/%3E%3Ctext x='56' y='74' fill='%2338BDF8' font-family='monospace' font-size='16'%3ESTOCKPILOT · DJANGO + MYSQL COCKPIT%3C/text%3E%3Crect x='56' y='100' width='210' height='110' rx='14' fill='%231E293B'/%3E%3Ctext x='74' y='138' fill='%2394A3B8' font-family='sans-serif' font-size='14'%3EActive SKUs%3C/text%3E%3Ctext x='74' y='180' fill='%23F8FAFC' font-family='sans-serif' font-size='32' font-weight='bold'%3E1,482%3C/text%3E%3Crect x='295' y='100' width='210' height='110' rx='14' fill='%231E293B'/%3E%3Ctext x='313' y='138' fill='%2394A3B8' font-family='sans-serif' font-size='14'%3ERole Access%3C/text%3E%3Ctext x='313' y='180' fill='%2334D399' font-family='sans-serif' font-size='26' font-weight='bold'%3ERBAC Active%3C/text%3E%3Crect x='534' y='100' width='210' height='110' rx='14' fill='%231E293B'/%3E%3Ctext x='552' y='138' fill='%2394A3B8' font-family='sans-serif' font-size='14'%3ELow Stock Alerts%3C/text%3E%3Ctext x='552' y='180' fill='%23FBBF24' font-family='sans-serif' font-size='32' font-weight='bold'%3E14%3C/text%3E%3Crect x='56' y='236' width='688' height='180' rx='14' fill='%230F172A' stroke='%231E293B' stroke-width='2'/%3E%3Ctext x='80' y='276' fill='%23E2E8F0' font-family='monospace' font-size='16'%3EModule 01 · Product Catalog &amp; Vendor Purchases%3C/text%3E%3Ctext x='80' y='316' fill='%2394A3B8' font-family='monospace' font-size='15'%3EModule 02 · Customer Sales Ledger &amp; Audit Logs%3C/text%3E%3Ctext x='80' y='356' fill='%2338BDF8' font-family='monospace' font-size='15'%3EPhase 1 Delivered · SQLite %E2%86%92 MySQL Ready%3C/text%3E%3C/svg%3E",
-    gallery: [
-      "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 480'%3E%3Crect width='800' height='480' fill='%230B0F1A'/%3E%3Crect x='28' y='28' width='744' height='424' rx='20' fill='%23111827' stroke='%23334155' stroke-width='2'/%3E%3Ctext x='56' y='74' fill='%2338BDF8' font-family='monospace' font-size='16'%3ESTOCKPILOT · DJANGO + MYSQL COCKPIT%3C/text%3E%3Crect x='56' y='100' width='210' height='110' rx='14' fill='%231E293B'/%3E%3Ctext x='74' y='138' fill='%2394A3B8' font-family='sans-serif' font-size='14'%3EActive SKUs%3C/text%3E%3Ctext x='74' y='180' fill='%23F8FAFC' font-family='sans-serif' font-size='32' font-weight='bold'%3E1,482%3C/text%3E%3Crect x='295' y='100' width='210' height='110' rx='14' fill='%231E293B'/%3E%3Ctext x='313' y='138' fill='%2394A3B8' font-family='sans-serif' font-size='14'%3ERole Access%3C/text%3E%3Ctext x='313' y='180' fill='%2334D399' font-family='sans-serif' font-size='26' font-weight='bold'%3ERBAC Active%3C/text%3E%3Crect x='534' y='100' width='210' height='110' rx='14' fill='%231E293B'/%3E%3Ctext x='552' y='138' fill='%2394A3B8' font-family='sans-serif' font-size='14'%3ELow Stock Alerts%3C/text%3E%3Ctext x='552' y='180' fill='%23FBBF24' font-family='sans-serif' font-size='32' font-weight='bold'%3E14%3C/text%3E%3Crect x='56' y='236' width='688' height='180' rx='14' fill='%230F172A' stroke='%231E293B' stroke-width='2'/%3E%3Ctext x='80' y='276' fill='%23E2E8F0' font-family='monospace' font-size='16'%3EModule 01 · Product Catalog &amp; Vendor Purchases%3C/text%3E%3Ctext x='80' y='316' fill='%2394A3B8' font-family='monospace' font-size='15'%3EModule 02 · Customer Sales Ledger &amp; Audit Logs%3C/text%3E%3Ctext x='80' y='356' fill='%2338BDF8' font-family='monospace' font-size='15'%3EPhase 1 Delivered · SQLite %E2%86%92 MySQL Ready%3C/text%3E%3C/svg%3E",
-    ],
+    image: '/assets/aistudio/Screenshot_2026-11-21_205957_fbfe19f9.png',
+    gallery: ['/assets/aistudio/Screenshot_2026-11-21_205957_fbfe19f9.png'],
     summary:
       'Executive retail management platform delivering a Phase 1 Django backend foundation with role-based access scaffolding, product catalog, vendor purchase, customer sales, and low-stock monitoring.',
     features: [
       'Delivered Phase 1 Django backend with secure user authentication, profile views, and role-based access scaffolding',
-      'Dark executive cockpit structuring product catalog, vendor purchase, customer sales, and low-stock modules',
+      'Live executive command center tracking BDT inventory retail value, cumulative sales revenue, cashflow, and Apple lineup stock valuation',
       'Relational schema designed for direct transition from SQLite in local dev to MySQL in multi-module production',
     ],
     stack: ['Python', 'Django', 'SQLite', 'MySQL', 'HTML5', 'CSS3', 'JavaScript'],
@@ -356,8 +353,8 @@ export const PROJECTS: ProjectItem[] = [
     architecture:
       'Normalized Django relational models engineered cleanly for local SQLite prototyping and multi-module MySQL production deployment.',
     outcome:
-      'Phase 1 codebase delivered covering authentication, profiles, and executive inventory cockpit.',
-    demoNotes: 'Architecture & active roadmap tracked in Now Building.',
+      'Phase 1 codebase delivered covering authentication, profiles, and executive inventory command center.',
+    demoNotes: 'Authentic StockPilot Bangladesh Tech Retail Command Center screenshot shown in gallery.',
     repoUrl: 'https://github.com/Jashedvai',
   },
   {

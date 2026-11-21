@@ -56,6 +56,17 @@ export function RoomExperience() {
     gear: 1,
     rpm: 1100,
     lapTimeSec: 0,
+    bestLapSec: null,
+    lap: 1,
+    totalLaps: 3,
+    position: 8,
+    totalCars: 12,
+    nitroPct: 100,
+    nitroActive: false,
+    phase: 'standby',
+    countdownVal: 3,
+    offTrack: false,
+    steerDeg: 0,
   });
 
   const stateRef = useRef(experienceState);
@@ -215,8 +226,16 @@ export function RoomExperience() {
     [setSteeringAngle]
   );
 
-  const handleRacingInput = useCallback((throttle: boolean, brake: boolean) => {
-    controllerRef.current?.setRacingInput(throttle, brake);
+  const handleRacingInput = useCallback(
+    (throttle: boolean, brake: boolean, steerDir = 0, nitro = false) => {
+      controllerRef.current?.setRacingInput(throttle, brake, steerDir, nitro);
+    },
+    []
+  );
+
+  const handleRestartRace = useCallback(() => {
+    controllerRef.current?.restartRace();
+    showTempNotice('Race restarted · Grid countdown');
   }, []);
 
   const handleToggleInspectSwitches = () => {
@@ -431,6 +450,7 @@ export function RoomExperience() {
         onToggleGamingMode={handleToggleGamingMode}
         onSteerWheel={handleSteerWheel}
         onRacingInput={handleRacingInput}
+        onRestartRace={handleRestartRace}
         onExitGamingView={exitGamingToOverview}
       />
     </>

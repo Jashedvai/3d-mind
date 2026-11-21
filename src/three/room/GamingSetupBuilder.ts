@@ -1,5 +1,11 @@
 import * as THREE from 'three';
 import { createRacingGameCanvas } from './roomTextures';
+import {
+  createRacingGameEngine,
+  getTelemetrySnapshot,
+  resetRacingGameEngine,
+  stepRacingGameEngine,
+} from './racingGameEngine';
 import { HitboxRegisterFn, RacingTelemetry } from './roomTypes';
 
 export interface GamingSetupHandles {
@@ -9,11 +15,14 @@ export interface GamingSetupHandles {
   gamingScreenMat: THREE.MeshPhysicalMaterial;
   gamingMonitorLight: THREE.PointLight;
   steeringRimGroup: THREE.Group;
+  restartRace: () => void;
   updateGamingVisuals: (
     gamingMode: boolean,
     targetSteerDeg: number,
     throttleActive: boolean,
     brakeActive: boolean,
+    steerDir: number,
+    nitroActive: boolean,
     lightsOn: boolean,
     dt: number,
     onTelemetry?: (t: RacingTelemetry) => void
@@ -152,16 +161,9 @@ export function buildGamingSetup(cfg: GamingSetupConfig): GamingSetupHandles {
   gBezel.castShadow = !isSoftwareGl;
   gamingMonGroup.add(gBezel);
 
+  const gameEngine = createRacingGameEngine();
   const racingCanvas = createRacingGameCanvas();
-  racingCanvas.drawFrame({
-    active: false,
-    steerDeg: 0,
-    speedKmh: 0,
-    rpm: 1100,
-    gear: 1,
-    distanceM: 0,
-    lapTimeSec: 0,
-  });
+  racingCanvas.drawFrame(gameEngine);
 
   const gamingScreenMat = new THREE.MeshPhysicalMaterial({
     color: 0x0b0e14,
@@ -379,89 +381,62 @@ export function buildGamingSetup(cfg: GamingSetupConfig): GamingSetupHandles {
   bucketSeatGroup.add(seatBase, seatBack, seatHead, harnessPass, hapticShaker);
   registerHitbox(bucketSeatGroup, [0.58, 1.05, 0.68], [0, 0.52, -0.12], 'wheel');
 
-  // Live Car Racing Simulation State
-  let carSpeedKmh = 0;
-  let trackDistanceM = 0;
-  let lapTimeSec = 14.2;
   let drawAccum = 0;
   let telemetryAccum = 0;
   let wasGamingActive = false;
+
+  const restartRace = () => {
+    resetRacingGameEngine(gameEngine, true);
+    racingCanvas.drawFrame(gameEngine);
+  };
 
   const updateGamingVisuals = (
     gamingMode: boolean,
     targetSteerDeg: number,
     throttleActive: boolean,
     brakeActive: boolean,
+    steerDir: number,
+    nitroActive: boolean,
     lightsOn: boolean,
     dt: number,
     onTelemetry?: (t: RacingTelemetry) => void
   ) => {
-    const targetRad = THREE.MathUtils.degToRad(targetSteerDeg);
+    stepRacingGameEngine(gameEngine, {
+      gamingMode,
+      throttle: throttleActive,
+      brake: brakeActive,
+      steerDir,
+      manualSteerDeg: targetSteerDeg,
+      nitro: nitroActive,
+      dt,
+    });
+
+    const targetRad = THREE.MathUtils.degToRad(gameEngine.steerDeg);
     steeringRimGroup.rotation.z = THREE.MathUtils.damp(
       steeringRimGroup.rotation.z,
       targetRad,
-      10,
+      14,
       dt
     );
 
     if (gamingMode) {
-      const targetSpeed = brakeActive
-        ? 45
-        : throttleActive
-          ? 288
-          : 168 - Math.abs(targetSteerDeg) * 0.45;
-      const accelRate = brakeActive ? 4.2 : throttleActive ? 2.4 : 1.6;
-      carSpeedKmh = THREE.MathUtils.damp(carSpeedKmh, targetSpeed, accelRate, dt);
-      trackDistanceM += (carSpeedKmh / 3.6) * dt;
-      lapTimeSec = (lapTimeSec + dt) % 204;
-
-      const gearSpan = 48;
-      const gear = Math.min(6, Math.max(1, Math.ceil(carSpeedKmh / gearSpan)));
-      const gearMinSpeed = (gear - 1) * gearSpan;
-      const gearProgress = Math.min(1, Math.max(0, (carSpeedKmh - gearMinSpeed) / gearSpan));
-      const rpm = Math.round(
-        Math.min(8950, 2200 + gearProgress * 6100 + (throttleActive ? 520 : 0))
-      );
-
       drawAccum += dt;
-      const minDrawInterval = isSoftwareGl ? 0.14 : 0.042;
+      const minDrawInterval = isSoftwareGl ? 0.14 : 0.04;
       if (!wasGamingActive || drawAccum >= minDrawInterval) {
         wasGamingActive = true;
         drawAccum = 0;
-        racingCanvas.drawFrame({
-          active: true,
-          steerDeg: THREE.MathUtils.radToDeg(steeringRimGroup.rotation.z),
-          speedKmh: carSpeedKmh,
-          rpm,
-          gear,
-          distanceM: trackDistanceM,
-          lapTimeSec,
-        });
+        racingCanvas.drawFrame(gameEngine);
       }
 
       telemetryAccum += dt;
-      if (telemetryAccum >= 0.05) {
+      if (telemetryAccum >= 0.045) {
         telemetryAccum = 0;
-        onTelemetry?.({
-          speedKmh: Math.round(carSpeedKmh),
-          gear,
-          rpm,
-          lapTimeSec,
-        });
+        onTelemetry?.(getTelemetrySnapshot(gameEngine));
       }
     } else if (wasGamingActive) {
       wasGamingActive = false;
-      carSpeedKmh = 0;
-      racingCanvas.drawFrame({
-        active: false,
-        steerDeg: 0,
-        speedKmh: 0,
-        rpm: 1100,
-        gear: 1,
-        distanceM: 0,
-        lapTimeSec: 0,
-      });
-      onTelemetry?.({ speedKmh: 0, gear: 1, rpm: 1100, lapTimeSec: 0 });
+      racingCanvas.drawFrame(gameEngine);
+      onTelemetry?.(getTelemetrySnapshot(gameEngine));
     }
 
     gamingScreenMat.emissiveIntensity = THREE.MathUtils.damp(
@@ -497,6 +472,7 @@ export function buildGamingSetup(cfg: GamingSetupConfig): GamingSetupHandles {
     gamingScreenMat,
     gamingMonitorLight,
     steeringRimGroup,
+    restartRace,
     updateGamingVisuals,
   };
 }

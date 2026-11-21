@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RacingGameEngineState } from './racingGameEngine';
 
 /**
  * Rich wood plank floor matching #6b442e base color with natural wood grain and plank seams.
@@ -385,21 +386,14 @@ export function createSideMonitorTexture(accentHex: string): THREE.CanvasTexture
 
 export interface RacingGameCanvasController {
   texture: THREE.CanvasTexture;
-  drawFrame: (params: {
-    active: boolean;
-    steerDeg: number;
-    speedKmh: number;
-    rpm: number;
-    gear: number;
-    distanceM: number;
-    lapTimeSec: number;
-  }) => void;
+  drawFrame: (engine: RacingGameEngineState) => void;
 }
 
 /**
- * Creates a reusable, high-fidelity realistic Car Racing Game canvas & texture
- * featuring receding perspective circuit, FIA rumble curbs, rival GT car,
- * vehicle cockpit dashboard, rotating steering wheel, speedometer, RPM gauge, and gear display.
+ * Creates a reusable, high-fidelity Car Racing Game canvas & texture
+ * featuring lateral player steering, curved perspective circuit, multi-car AI traffic,
+ * F1 countdown lights, nitro speed streaks, cockpit dashboard, needle speedometer,
+ * and bottom-right RPM / gear / lap timer HUD.
  */
 export function createRacingGameCanvas(): RacingGameCanvasController {
   const w = 1024;
@@ -412,18 +406,34 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
 
-  const drawFrame: RacingGameCanvasController['drawFrame'] = ({
-    active,
-    steerDeg,
-    speedKmh,
-    rpm,
-    gear,
-    distanceM,
-    lapTimeSec,
-  }) => {
+  const drawFrame: RacingGameCanvasController['drawFrame'] = (engine) => {
     if (!ctx) return;
 
-    if (!active) {
+    const {
+      phase,
+      countdownVal,
+      steerDeg,
+      speedKmh,
+      rpm,
+      gear,
+      distanceM,
+      lapLengthM,
+      lap,
+      totalLaps,
+      lapTimeSec,
+      bestLapSec,
+      position,
+      totalCars,
+      playerX,
+      nitroPct,
+      nitroActive,
+      offTrack,
+      collisionTimer,
+      trackCurvature,
+      rivals,
+    } = engine;
+
+    if (phase === 'standby') {
       const standbyBg = ctx.createLinearGradient(0, 0, 0, h);
       standbyBg.addColorStop(0, '#0a0e16');
       standbyBg.addColorStop(1, '#111827');
@@ -437,23 +447,33 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
       ctx.fillStyle = '#38BDF8';
       ctx.font = '700 18px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('APEX GT RACING · STANDBY', w / 2, 246);
+      ctx.fillText('APEX GT RACING · STANDBY', w / 2, 240);
 
       ctx.fillStyle = '#E2E8F0';
       ctx.font = '600 28px sans-serif';
-      ctx.fillText('Click Console or Start Console to Race', w / 2, 294);
+      ctx.fillText('Click Console or Start Race to Drive', w / 2, 288);
 
-      ctx.fillStyle = '#64748B';
-      ctx.font = '400 16px monospace';
-      ctx.fillText('Realistic Cockpit · Track Perspective · Live Speedometer', w / 2, 334);
+      ctx.fillStyle = '#94A3B8';
+      ctx.font = '400 15px monospace';
+      ctx.fillText('W Gas · S Brake · A / D Steer · Space Nitro Boost', w / 2, 330);
       texture.needsUpdate = true;
       return;
     }
 
-    const horizonY = 232;
-    const roadBottomY = 418;
-    const curveShift = Math.max(-135, Math.min(135, -steerDeg * 1.45 + Math.sin(distanceM * 0.018) * 32));
-    const vanishX = w / 2 + curveShift * 0.55;
+    // Subtle cockpit shake on off-track rumble strips or car contact
+    const rumbleJitter =
+      offTrack && speedKmh > 40
+        ? Math.sin(distanceM * 1.4) * 3.5
+        : collisionTimer > 0.35
+          ? Math.sin(performance.now() * 0.08) * 6
+          : 0;
+
+    const horizonY = 232 + rumbleJitter;
+    const roadBottomY = 420;
+    const curveShift = trackCurvature * 145;
+    const playerShiftPx = -playerX * 155;
+    const vanishX = w / 2 + curveShift * 0.62 + playerShiftPx * 0.18;
+    const roadBottomCenterX = w / 2 + playerShiftPx;
 
     // 1. Sunset / Dusk Sky & Distant Mountains
     const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY);
@@ -480,7 +500,7 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
     ctx.fill();
 
     // 2. Grass Track Verge & Perspective Ground Bands
-    ctx.fillStyle = '#1c3a24';
+    ctx.fillStyle = offTrack ? '#28361c' : '#1c3a24';
     ctx.fillRect(0, horizonY, w, roadBottomY - horizonY);
 
     const stripeCount = 14;
@@ -498,9 +518,13 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
       }
     }
 
+    // Helper for road centerline X at perspective depth p (0 = horizon, 1 = foreground)
+    const getRoadCenterX = (p: number) =>
+      vanishX + (roadBottomCenterX - vanishX) * p - curveShift * 0.28 * (1 - p) * p * 4;
+
     // 3. Perspective Asphalt Road Surface with Curve & Rumble Curbs
     const halfRoadTop = 34;
-    const halfRoadBot = 460;
+    const halfRoadBot = 450;
 
     // Left & Right FIA Rumble Curbs (Red & White)
     for (let i = 0; i < stripeCount; i++) {
@@ -511,8 +535,8 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
       const y0 = horizonY + p0 * (roadBottomY - horizonY);
       const y1 = horizonY + p1 * (roadBottomY - horizonY);
 
-      const cx0 = vanishX + (w / 2 - vanishX) * p0 - curveShift * 0.25 * (1 - p0);
-      const cx1 = vanishX + (w / 2 - vanishX) * p1 - curveShift * 0.25 * (1 - p1);
+      const cx0 = getRoadCenterX(p0);
+      const cx1 = getRoadCenterX(p1);
       const hw0 = halfRoadTop + (halfRoadBot - halfRoadTop) * p0;
       const hw1 = halfRoadTop + (halfRoadBot - halfRoadTop) * p1;
       const kw0 = 6 + 24 * p0;
@@ -538,27 +562,49 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
       ctx.fill();
     }
 
-    // Asphalt surface polygon
+    // Asphalt surface polygon (segmented for subtle curve bend)
     const roadGrad = ctx.createLinearGradient(0, horizonY, 0, roadBottomY);
     roadGrad.addColorStop(0, '#333942');
     roadGrad.addColorStop(1, '#191d24');
     ctx.fillStyle = roadGrad;
-    ctx.beginPath();
-    ctx.moveTo(vanishX - halfRoadTop, horizonY);
-    ctx.lineTo(vanishX + halfRoadTop, horizonY);
-    ctx.lineTo(w / 2 + halfRoadBot, roadBottomY);
-    ctx.lineTo(w / 2 - halfRoadBot, roadBottomY);
-    ctx.closePath();
-    ctx.fill();
+    for (let s = 0; s < 10; s++) {
+      const p0 = Math.pow(s / 10, 1.6);
+      const p1 = Math.pow((s + 1) / 10, 1.6);
+      const y0 = horizonY + p0 * (roadBottomY - horizonY);
+      const y1 = horizonY + p1 * (roadBottomY - horizonY);
+      const cx0 = getRoadCenterX(p0);
+      const cx1 = getRoadCenterX(p1);
+      const hw0 = halfRoadTop + (halfRoadBot - halfRoadTop) * p0;
+      const hw1 = halfRoadTop + (halfRoadBot - halfRoadTop) * p1;
+      ctx.beginPath();
+      ctx.moveTo(cx0 - hw0, y0);
+      ctx.lineTo(cx0 + hw0, y0);
+      ctx.lineTo(cx1 + hw1, y1 + 1);
+      ctx.lineTo(cx1 - hw1, y1 + 1);
+      ctx.closePath();
+      ctx.fill();
+    }
 
     // White Track Edge Lines & Scrolling Center Lane Dashes
     ctx.strokeStyle = 'rgba(248, 250, 252, 0.72)';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(vanishX - halfRoadTop + 2, horizonY);
-    ctx.lineTo(w / 2 - halfRoadBot + 8, roadBottomY);
-    ctx.moveTo(vanishX + halfRoadTop - 2, horizonY);
-    ctx.lineTo(w / 2 + halfRoadBot - 8, roadBottomY);
+    for (let s = 0; s <= 10; s++) {
+      const p = Math.pow(s / 10, 1.6);
+      const y = horizonY + p * (roadBottomY - horizonY);
+      const cx = getRoadCenterX(p);
+      const hw = halfRoadTop + (halfRoadBot - halfRoadTop) * p;
+      if (s === 0) ctx.moveTo(cx - hw + 4, y);
+      else ctx.lineTo(cx - hw + 4, y);
+    }
+    for (let s = 0; s <= 10; s++) {
+      const p = Math.pow(s / 10, 1.6);
+      const y = horizonY + p * (roadBottomY - horizonY);
+      const cx = getRoadCenterX(p);
+      const hw = halfRoadTop + (halfRoadBot - halfRoadTop) * p;
+      if (s === 0) ctx.moveTo(cx + hw - 4, y);
+      else ctx.lineTo(cx + hw - 4, y);
+    }
     ctx.stroke();
 
     for (let i = 0; i < stripeCount; i += 2) {
@@ -568,11 +614,11 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
       const p1 = Math.pow(z1, 1.85);
       const y0 = horizonY + p0 * (roadBottomY - horizonY);
       const y1 = horizonY + p1 * (roadBottomY - horizonY);
-      const cx0 = vanishX + (w / 2 - vanishX) * p0;
-      const cx1 = vanishX + (w / 2 - vanishX) * p1;
+      const cx0 = getRoadCenterX(p0);
+      const cx1 = getRoadCenterX(p1);
       const dw0 = 2 + 5 * p0;
       const dw1 = 2 + 5 * p1;
-      ctx.fillStyle = 'rgba(248, 250, 252, 0.8)';
+      ctx.fillStyle = 'rgba(248, 250, 252, 0.78)';
       ctx.beginPath();
       ctx.moveTo(cx0 - dw0, y0);
       ctx.lineTo(cx0 + dw0, y0);
@@ -582,14 +628,37 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
       ctx.fill();
     }
 
+    // Corner Apex Chevron Warning Boards on steep curves
+    if (Math.abs(trackCurvature) > 0.45) {
+      const side = trackCurvature > 0 ? -1 : 1;
+      for (let b = 0; b < 3; b++) {
+        const p = 0.22 + b * 0.16;
+        const by = horizonY + p * (roadBottomY - horizonY);
+        const bcx = getRoadCenterX(p);
+        const bhw = halfRoadTop + (halfRoadBot - halfRoadTop) * p;
+        const bx = bcx + side * (bhw + 26 + b * 14);
+        const bw = 18 + b * 10;
+        const bh = 14 + b * 8;
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(bx - bw / 2, by - bh, bw, bh);
+        ctx.strokeStyle = '#F59E0B';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(bx - side * (bw * 0.25), by - bh * 0.78);
+        ctx.lineTo(bx + side * (bw * 0.22), by - bh * 0.5);
+        ctx.lineTo(bx - side * (bw * 0.25), by - bh * 0.22);
+        ctx.stroke();
+      }
+    }
+
     // Trackside Overhead Sponsor / Timing Gantry passing periodically
-    const gantryPhase = (distanceM * 0.025) % 1;
-    if (gantryPhase > 0.15 && gantryPhase < 0.95) {
+    const gantryPhase = (distanceM * 0.018) % 1;
+    if (gantryPhase > 0.18 && gantryPhase < 0.94) {
       const gp = Math.pow(gantryPhase, 1.9);
-      const gy = horizonY + gp * 110;
+      const gy = horizonY + gp * 118;
       const gh = 14 + gp * 65;
-      const gx = vanishX + (w / 2 - vanishX) * gp;
-      const gHalf = (halfRoadTop + (halfRoadBot - halfRoadTop) * gp) * 1.12;
+      const gx = getRoadCenterX(gp * 0.65);
+      const gHalf = (halfRoadTop + (halfRoadBot - halfRoadTop) * (gp * 0.65)) * 1.16;
       ctx.fillStyle = '#0f172a';
       ctx.fillRect(gx - gHalf, gy - gh, gHalf * 2, 10 + gp * 18);
       ctx.fillRect(gx - gHalf, gy - gh, 6 + gp * 8, gh);
@@ -597,38 +666,93 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
       ctx.fillStyle = '#38BDF8';
       ctx.font = `700 ${Math.round(9 + gp * 10)}px monospace`;
       ctx.textAlign = 'center';
-      ctx.fillText('APEX CIRCUIT', gx, gy - gh + 10 + gp * 10);
+      ctx.fillText(`APEX CIRCUIT · LAP ${lap}/${totalLaps}`, gx, gy - gh + 10 + gp * 10);
     }
 
-    // Rival GT Race Car ahead on track
-    const rivalX = vanishX + Math.sin(distanceM * 0.03) * 38;
-    const rivalY = horizonY + 34;
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath();
-    ctx.roundRect(rivalX - 36, rivalY - 14, 72, 24, 6);
-    ctx.fill();
-    // Rear wing
-    ctx.fillStyle = '#334155';
-    ctx.fillRect(rivalX - 38, rivalY - 22, 76, 5);
-    // Glowing red LED tail lights
-    ctx.fillStyle = '#ef4444';
-    ctx.fillRect(rivalX - 31, rivalY - 6, 16, 5);
-    ctx.fillRect(rivalX + 15, rivalY - 6, 16, 5);
+    // Multi-Car AI Traffic rendered farthest -> closest
+    const visibleRivals = rivals
+      .map((r) => ({ rival: r, relDist: r.distanceM - distanceM }))
+      .filter((item) => item.relDist > 4 && item.relDist < 260)
+      .sort((a, b) => b.relDist - a.relDist);
 
-    // Subtle Car Bonnet / Hood over bottom windshield
+    visibleRivals.forEach(({ rival, relDist }) => {
+      const depthFrac = 1 - Math.min(1, Math.max(0, relDist / 260));
+      const p = Math.pow(depthFrac, 2.2);
+      const carY = horizonY + p * (roadBottomY - horizonY - 22);
+      const roadCx = getRoadCenterX(p);
+      const halfW = halfRoadTop + (halfRoadBot - halfRoadTop) * p;
+      const carX = roadCx + rival.lane * halfW * 0.85;
+      const carScale = 0.24 + p * 1.38;
+      const cw = 72 * carScale;
+      const ch = 26 * carScale;
+
+      // Ground shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+      ctx.beginPath();
+      ctx.ellipse(carX, carY + ch * 0.35, cw * 0.56, ch * 0.28, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // GT Rear Bodywork
+      ctx.fillStyle = rival.color;
+      ctx.beginPath();
+      ctx.roundRect(carX - cw / 2, carY - ch * 0.65, cw, ch, 5 * carScale);
+      ctx.fill();
+
+      // Cabin greenhouse
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.roundRect(carX - cw * 0.32, carY - ch * 1.05, cw * 0.64, ch * 0.48, 4 * carScale);
+      ctx.fill();
+
+      // Carbon GT Rear Wing
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(carX - cw * 0.54, carY - ch * 1.12, cw * 1.08, Math.max(2, 4.5 * carScale));
+      ctx.fillRect(carX - cw * 0.25, carY - ch * 0.96, Math.max(1.5, 3 * carScale), ch * 0.34);
+      ctx.fillRect(carX + cw * 0.22, carY - ch * 0.96, Math.max(1.5, 3 * carScale), ch * 0.34);
+
+      // Glowing Red Tail Lights
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(carX - cw * 0.43, carY - ch * 0.38, cw * 0.22, Math.max(2, 4.5 * carScale));
+      ctx.fillRect(carX + cw * 0.21, carY - ch * 0.38, cw * 0.22, Math.max(2, 4.5 * carScale));
+    });
+
+    // Nitro Boost & High-Speed Peripheral Airflow Streaks
+    if (nitroActive || speedKmh > 235) {
+      const streakCount = nitroActive ? 14 : 7;
+      ctx.strokeStyle = nitroActive ? 'rgba(56, 189, 248, 0.55)' : 'rgba(226, 232, 240, 0.25)';
+      ctx.lineWidth = nitroActive ? 2.5 : 1.5;
+      for (let k = 0; k < streakCount; k++) {
+        const ang = (k / streakCount) * Math.PI * 2 + (distanceM * 0.05) % 1;
+        const r0 = 260 + ((k * 37) % 80);
+        const r1 = r0 + (nitroActive ? 130 : 75);
+        ctx.beginPath();
+        ctx.moveTo(w / 2 + Math.cos(ang) * r0, 220 + Math.sin(ang) * r0 * 0.55);
+        ctx.lineTo(w / 2 + Math.cos(ang) * r1, 220 + Math.sin(ang) * r1 * 0.55);
+        ctx.stroke();
+      }
+    }
+
+    // Collision Impact Vignette Flash
+    if (collisionTimer > 0.35) {
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.18)';
+      ctx.fillRect(0, 0, w, roadBottomY);
+    }
+
+    // Subtle Car Bonnet / Hood over bottom windshield (tilted slightly with steering)
+    const hoodShift = -steerDeg * 0.14;
     ctx.fillStyle = '#1e2430';
     ctx.beginPath();
-    ctx.moveTo(185, 412);
-    ctx.lineTo(839, 412);
+    ctx.moveTo(185 + hoodShift, 412 + rumbleJitter * 0.4);
+    ctx.lineTo(839 + hoodShift, 412 + rumbleJitter * 0.4);
     ctx.lineTo(940, 442);
     ctx.lineTo(84, 442);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+    ctx.strokeStyle = nitroActive ? 'rgba(56, 189, 248, 0.5)' : 'rgba(255,255,255,0.16)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(185, 412);
-    ctx.lineTo(839, 412);
+    ctx.moveTo(185 + hoodShift, 412 + rumbleJitter * 0.4);
+    ctx.lineTo(839 + hoodShift, 412 + rumbleJitter * 0.4);
     ctx.stroke();
 
     // 4. Windshield Frame, A-Pillars & Rear-View Mirror
@@ -861,13 +985,29 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
     ctx.beginPath();
     ctx.ellipse(620, 496, 35, 23, 0.25, 0, Math.PI * 2);
     ctx.stroke();
-    const mapDotAng = (distanceM * 0.015) % (Math.PI * 2);
+
+    // Rival car dots on circuit minimap
+    rivals.forEach((rv) => {
+      const rAng = ((rv.distanceM % lapLengthM) / lapLengthM) * Math.PI * 2;
+      ctx.fillStyle = rv.color;
+      ctx.beginPath();
+      ctx.arc(
+        620 + Math.cos(rAng) * 35 * Math.cos(0.25) - Math.sin(rAng) * 23 * Math.sin(0.25),
+        496 + Math.cos(rAng) * 35 * Math.sin(0.25) + Math.sin(rAng) * 23 * Math.cos(0.25),
+        3.2,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+    });
+
+    const mapDotAng = ((distanceM % lapLengthM) / lapLengthM) * Math.PI * 2;
     ctx.fillStyle = '#38BDF8';
     ctx.beginPath();
     ctx.arc(
       620 + Math.cos(mapDotAng) * 35 * Math.cos(0.25) - Math.sin(mapDotAng) * 23 * Math.sin(0.25),
       496 + Math.cos(mapDotAng) * 35 * Math.sin(0.25) + Math.sin(mapDotAng) * 23 * Math.cos(0.25),
-      5,
+      5.2,
       0,
       Math.PI * 2
     );
@@ -875,7 +1015,7 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
 
     ctx.fillStyle = '#CBD5E1';
     ctx.font = '600 10px monospace';
-    ctx.fillText('POS 2 / 12', 620, 544);
+    ctx.fillText(`POS ${position} / ${totalCars}`, 620, 544);
 
     // 6. Rotating Cockpit Steering Wheel Silhouette (Centered Between Speedometer & Tachometer)
     ctx.save();
@@ -1015,11 +1155,8 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
     // Lap Timer Readout (Bottom-Right inside HUD card)
     const lapX = gearBoxX + gearBoxW + 14;
     const lapRight = hudX + hudW - 16;
-    const lapDuration = 68;
-    const lapNum = Math.min(3, Math.floor(lapTimeSec / lapDuration) + 1);
-    const lapDisplaySec = lapTimeSec % lapDuration;
-    const mins = Math.floor(lapDisplaySec / 60);
-    const secs = (lapDisplaySec % 60).toFixed(2).padStart(5, '0');
+    const mins = Math.floor(lapTimeSec / 60);
+    const secs = (lapTimeSec % 60).toFixed(2).padStart(5, '0');
 
     ctx.textAlign = 'left';
     ctx.fillStyle = '#94A3B8';
@@ -1029,12 +1166,102 @@ export function createRacingGameCanvas(): RacingGameCanvasController {
     ctx.textAlign = 'right';
     ctx.fillStyle = '#38BDF8';
     ctx.font = '600 10px monospace';
-    ctx.fillText(`LAP 0${lapNum} / 03`, lapRight, gearBoxY + 13);
+    ctx.fillText(`LAP 0${lap} / 0${totalLaps}`, lapRight, gearBoxY + 13);
 
     ctx.textAlign = 'left';
     ctx.fillStyle = '#F8FAFC';
     ctx.font = '700 28px monospace';
     ctx.fillText(`${String(mins).padStart(2, '0')}:${secs}`, lapX, gearBoxY + 43);
+
+    // 8. Top-Left Windshield Race Telemetry Banner (Position, Best Lap, Nitro)
+    ctx.fillStyle = 'rgba(8, 12, 20, 0.86)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(88, 18, 246, 56, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#38BDF8';
+    ctx.font = '700 16px monospace';
+    ctx.fillText(`P${position}/${totalCars}`, 102, 41);
+
+    const bestLabel =
+      bestLapSec !== null
+        ? `${String(Math.floor(bestLapSec / 60)).padStart(2, '0')}:${(bestLapSec % 60).toFixed(2).padStart(5, '0')}`
+        : '--:--.--';
+    ctx.fillStyle = '#94A3B8';
+    ctx.font = '600 11px monospace';
+    ctx.fillText(`BEST ${bestLabel}`, 172, 40);
+
+    ctx.fillStyle = nitroActive ? '#38BDF8' : '#64748B';
+    ctx.font = '600 9px monospace';
+    ctx.fillText('NITRO', 102, 62);
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.2)';
+    ctx.beginPath();
+    ctx.roundRect(142, 54, 174, 9, 4);
+    ctx.fill();
+    ctx.fillStyle = nitroActive ? '#F59E0B' : '#38BDF8';
+    ctx.beginPath();
+    ctx.roundRect(142, 54, Math.max(4, 1.74 * nitroPct), 9, 4);
+    ctx.fill();
+
+    // Off-track rumble warning pill
+    if (offTrack) {
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.88)';
+      ctx.beginPath();
+      ctx.roundRect(w - 252, 22, 164, 28, 7);
+      ctx.fill();
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '700 12px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('OFF TRACK · CURB', w - 170, 40);
+    }
+
+    // 9. Race Start Countdown Lights Overlay OR Finish Checkered Flag Overlay
+    if (phase === 'countdown') {
+      ctx.fillStyle = 'rgba(8, 12, 20, 0.88)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(w / 2 - 140, 108, 280, 92, 14);
+      ctx.fill();
+      ctx.stroke();
+
+      for (let li = 0; li < 3; li++) {
+        const lit = li >= 3 - countdownVal;
+        ctx.fillStyle = lit ? '#EF4444' : '#1E293B';
+        ctx.beginPath();
+        ctx.arc(w / 2 - 56 + li * 56, 142, 16, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#F8FAFC';
+      ctx.font = '700 15px monospace';
+      ctx.fillText(`LIGHTS IN ${countdownVal}... HOLD [W]`, w / 2, 184);
+    } else if (phase === 'finished') {
+      ctx.fillStyle = 'rgba(8, 12, 20, 0.9)';
+      ctx.strokeStyle = '#38BDF8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(w / 2 - 180, 108, 360, 108, 14);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#38BDF8';
+      ctx.font = '700 13px monospace';
+      ctx.fillText('CHECKERED FLAG · RACE COMPLETE', w / 2, 138);
+
+      ctx.fillStyle = '#F8FAFC';
+      ctx.font = '700 26px monospace';
+      ctx.fillText(`FINISHED P${position} / ${totalCars}`, w / 2, 174);
+
+      ctx.fillStyle = '#94A3B8';
+      ctx.font = '600 12px monospace';
+      ctx.fillText(`BEST LAP ${bestLabel} · CLICK RESTART TO RACE AGAIN`, w / 2, 200);
+    }
 
     texture.needsUpdate = true;
   };

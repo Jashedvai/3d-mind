@@ -1058,6 +1058,8 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
   let targetSteerDeg = 0;
   let racingThrottle = false;
   let racingBrake = false;
+  let racingSteerDir = 0;
+  let racingNitro = false;
   let currentFanSpeed = 4.8;
   let pcBootLevel = initialState === 'BOOTING' || initialState === 'DESKTOP' ? 1 : 0;
 
@@ -1527,6 +1529,8 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
       targetSteerDeg,
       racingThrottle,
       racingBrake,
+      racingSteerDir,
+      racingNitro,
       devicesState.rgbLight,
       dt,
       onRacingTelemetry
@@ -1779,9 +1783,14 @@ export function mountRoomScene(options: RoomSceneOptions): RoomSceneController {
     setSteeringWheelAngle(deg: number) {
       targetSteerDeg = deg;
     },
-    setRacingInput(throttle: boolean, brake: boolean) {
+    setRacingInput(throttle: boolean, brake: boolean, steerDir = 0, nitro = false) {
       racingThrottle = throttle;
       racingBrake = brake;
+      racingSteerDir = steerDir;
+      racingNitro = nitro;
+    },
+    restartRace() {
+      gamingHandles.restartRace();
     },
     setFanEnabled(enabled: boolean) {
       devicesState = { ...devicesState, fan: enabled };

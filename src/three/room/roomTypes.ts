@@ -37,11 +37,24 @@ export type HitboxRegisterFn = (
   part: RoomInteractivePart
 ) => void;
 
+export type RacePhase = 'standby' | 'countdown' | 'racing' | 'finished';
+
 export interface RacingTelemetry {
   speedKmh: number;
   gear: number;
   rpm: number;
   lapTimeSec: number;
+  bestLapSec: number | null;
+  lap: number;
+  totalLaps: number;
+  position: number;
+  totalCars: number;
+  nitroPct: number;
+  nitroActive: boolean;
+  phase: RacePhase;
+  countdownVal: number;
+  offTrack: boolean;
+  steerDeg: number;
 }
 
 export interface RoomSceneController {
@@ -59,7 +72,8 @@ export interface RoomSceneController {
   setChargingState: (charging: boolean) => void;
   setGamingMode: (enabled: boolean) => void;
   setSteeringWheelAngle: (deg: number) => void;
-  setRacingInput: (throttle: boolean, brake: boolean) => void;
+  setRacingInput: (throttle: boolean, brake: boolean, steerDir?: number, nitro?: boolean) => void;
+  restartRace: () => void;
   setFanEnabled: (enabled: boolean) => void;
   setAcEnabled: (enabled: boolean) => void;
   setReducedMotion: (reduced: boolean) => void;
